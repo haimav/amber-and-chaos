@@ -83,7 +83,7 @@
       const g = this.g, pid = this.pid;
       this.my = g.units.filter((u) => !u.dead && u.owner === pid);
       this.workers = this.my.filter((u) => u.def.role === 'worker');
-      this.army = this.my.filter((u) => u.def.role !== 'worker' && !u.def.summon);
+      this.army = this.my.filter((u) => u.def.role !== 'worker' && !u.def.summon && !u.garrison);
       this.heroList = this.my.filter((u) => u.def.hero);
       this.blds = g.buildings.filter((b) => !b.dead && b.owner === pid);
       this.hqs = this.blds.filter((b) => b.def.dropoff);
@@ -167,6 +167,14 @@
       }
       const have = (id) => (this.count[id] || 0) + (pending[id] || 0);
       this.reserve = { d: 0, p: 0 };
+      // no place left to bring diamonds: raise a new seat before anything else
+      if (!this.hqs.length && this.workers.length) {
+        if (pending[p.F.hq] || pending[p.F.expansion]) return;
+        const id = g.canBuildType(p.F.hq) ? p.F.hq : p.F.expansion;
+        if (!g.canBuildType(id) || !g.meetsReq(this.pid, AC.BUILDINGS[id])) return;
+        if (!this.tryBuild(id)) this.reserve = AC.BUILDINGS[id].cost;
+        return;
+      }
       // supply first
       const supplyId = p.F.supplyBldg;
       const supplyBuilding = this.blds.some((b) => b.def.id === supplyId && !b.built) || pending[supplyId];
@@ -221,7 +229,7 @@
       const g = this.g, p = this.p;
       const def = AC.BUILDINGS[id];
       if (!g.canAfford(p, def.cost)) return false;
-      const spot = def.hq && id !== p.F.hq ? this.findExpansion(id) : this.findSpot(id);
+      const spot = def.hq && id !== p.F.hq && this.hqs.length ? this.findExpansion(id) : this.findSpot(id);
       if (!spot) {
         // chaos: extend the road with an obelisk
         if (p.faction === 'chaos' && id !== 'obelisk' && g.canAfford(p, AC.BUILDINGS.obelisk.cost) &&
@@ -240,7 +248,7 @@
       const g = this.g, m = g.map;
       const def = AC.BUILDINGS[id];
       const s = def.size;
-      const h = this.mainHq;
+      const h = this.mainHq || this.homeAnchor();
       if (!h) return null;
       const hx = h.tx + Math.floor(h.size / 2), hy = h.ty + Math.floor(h.size / 2);
       // resource direction to keep mining lanes clear
@@ -280,6 +288,12 @@
       }
       return null;
     }
+    // with no buildings left, build around the workers instead
+    homeAnchor() {
+      const w = this.workers[0];
+      if (!w) return null;
+      return { x: w.x, y: w.y, tx: Math.floor(w.x / T), ty: Math.floor(w.y / T), size: 1 };
+    }
     overlapsPending(tx, ty, s) {
       for (const w of this.workers) {
         for (const o of [w.order, ...w.queue]) {
@@ -290,16 +304,26 @@
       }
       return false;
     }
+    // a walkway all round, and never a plug in a pass: the open ground around the
+    // footprint must be one unbroken stretch, or the building would join two obstacles
     ringClear(tx, ty, s) {
       const m = this.g.map;
-      for (let y = ty - 1; y <= ty + s; y++)
-        for (let x = tx - 1; x <= tx + s; x++) {
-          if (x >= tx && x < tx + s && y >= ty && y < ty + s) continue;
-          if (!m.inb(x, y)) return false;
-          const o = m.occ[y * m.w + x];
-          if (o) { const e = this.g.get(o); if (e && e.kind === 'building') return false; }
-        }
-      return true;
+      const ring = [];
+      for (let x = tx - 1; x <= tx + s; x++) ring.push([x, ty - 1]);
+      for (let y = ty; y <= ty + s; y++) ring.push([tx + s, y]);
+      for (let x = tx + s - 1; x >= tx - 1; x--) ring.push([x, ty + s]);
+      for (let y = ty + s - 1; y >= ty; y--) ring.push([tx - 1, y]);
+      const open = [];
+      for (const [x, y] of ring) {
+        if (!m.inb(x, y)) return false;
+        const i = y * m.w + x;
+        const o = m.occ[i];
+        if (o) { const e = this.g.get(o); if (e && e.kind === 'building') return false; }
+        open.push((AC.PASS[m.terrain[i]] & 1) !== 0);
+      }
+      let runs = 0;
+      for (let i = 0; i < open.length; i++) if (open[i] && !open[(i + open.length - 1) % open.length]) runs++;
+      return runs === 1 || (runs === 0 && open[0]);
     }
     findExpansion(id) {
       const g = this.g;
@@ -372,7 +396,7 @@
         let pick = null;
         for (const [id] of ranked) {
           const d = AC.UNITS[id];
-          if (p.supplyUsed + d.supply > p.supplyCap) continue;
+          if (p.supplyUsed + d.supply > p.supplyCap - (this.heroRoom || 0)) continue;
           if (!g.canAfford(p, d.cost)) continue;
           if ((p.res.d - d.cost.d < reserve.d || p.res.p - d.cost.p < reserve.p) && p.res.d < reserve.d + d.cost.d + 150) continue;
           pick = id;
@@ -386,21 +410,27 @@
     }
     heroes() {
       const g = this.g, p = this.p;
+      this.heroRoom = 0;
       if (this.opts.noHeroes) return;
       const hall = this.blds.find((b) => b.built && b.def.heroes);
       if (!hall || hall.trainQ.length) return;
       const want = g.time > 900 ? 3 : g.time > 480 ? 2 : 1;
       g.recomputeSupply();
-      if ((p.heroCount || 0) >= Math.min(want, AC.MAX_HEROES)) return;
-      // hold back resources for the hero
-      const nextHero = AC.UNITS[(Object.keys(p.deadHeroes)[0]) || this.heroPrefs[0]];
-      if (nextHero && !g.canAfford(p, nextHero.cost)) this.reserve = { d: Math.max(this.reserve ? this.reserve.d : 0, nextHero.cost.d * 0.5), p: nextHero.cost.p };
+      if ((p.heroCount || 0) >= AC.MAX_HEROES) return;
+      const ok = (id) => hall.def.heroes.indexOf(id) >= 0 && !(g.bannedHeroes && g.bannedHeroes.has(id)) &&
+        g.heroStatus(this.pid, id) !== 'alive' && g.heroStatus(this.pid, id) !== 'queued';
       // revive the fallen first
-      const dead = Object.keys(p.deadHeroes).filter((h) => hall.def.heroes.indexOf(h) >= 0);
-      const list = dead.length ? dead : this.heroPrefs;
+      const dead = Object.keys(p.deadHeroes).filter(ok);
+      const list = dead.length ? dead : this.heroPrefs.filter(ok);
+      if (!list.length) return;
+      const nextHero = AC.UNITS[list[0]];
+      // keep supply free for the next hero, so a full army cannot lock heroes out
+      const due = (p.heroCount || 0) < want;
+      if (due || p.supplyCap >= AC.MAX_SUPPLY) this.heroRoom = nextHero.supply || 0;
+      if (!due) return;
+      // hold back resources for the hero
+      if (!g.canAfford(p, g.trainCost(this.pid, list[0]).cost)) this.reserve = { d: Math.max(this.reserve ? this.reserve.d : 0, nextHero.cost.d * 0.5), p: nextHero.cost.p };
       for (const id of list) {
-        if (g.bannedHeroes && g.bannedHeroes.has(id)) continue;
-        if (g.heroStatus(this.pid, id) === 'alive' || g.heroStatus(this.pid, id) === 'queued') continue;
         const tc = g.trainCost(this.pid, id);
         if (!g.canAfford(p, tc.cost)) return;
         this.cmd({ type: 'train', ids: [hall.id], def: id });
@@ -460,7 +490,7 @@
     }
     military() {
       const g = this.g;
-      const fighters = this.army.filter((u) => !this.siteSquad.has(u.id));
+      const fighters = this.army.filter((u) => !this.siteSquad.has(u.id) && !(u.order && u.order.retreat));
       // site capture squad
       this.manageSites();
       const threat = this.threats();
@@ -571,20 +601,31 @@
       const A = AC.Abilities;
       const casters = (this.my || g.units.filter((u) => !u.dead && u.owner === this.pid)).filter((u) => u.def.abilities && !u.dead);
       for (const h of casters) {
-        if (h.channel || (h.order && h.order.type === 'cast')) continue;
+        const casting = h.channel || (h.order && h.order.type === 'cast');
+        const hpF = h.hp / h.maxHp;
+        // a nearly dead hero walks home, abandoning an approach to a cast; one already
+        // channelling (or recalling) is left to finish
+        if (h.def.hero && hpF < 0.22 && this.mainHq && !h.channel && !(casting && AC.ABILITIES[h.order.ab] && AC.ABILITIES[h.order.ab].ai === 'retreat')) {
+          const foes = A.enemiesIn(g, h, h.x, h.y, 10 * T, { visible: true }).filter((u) => !g.players[u.owner].isNeutral || u.order && u.order.target === h.id);
+          const far = Math.hypot(this.mainHq.x - h.x, this.mainHq.y - h.y);
+          if (foes.length && far > 6 * T) {
+            const recall = h.def.abilities.find((a) => AC.ABILITIES[a].ai === 'retreat');
+            if (recall && far > 15 * T && A.canCast(g, h, recall).ok) { this.cmd({ type: 'cast', ids: [h.id], ab: recall }); continue; }
+            if (!(h.order && h.order.retreat)) {
+              this.cmd({ type: 'move', ids: [h.id], x: this.mainHq.x, y: this.mainHq.y + 3 * T });
+              if (h.order && h.order.type === 'move') h.order.retreat = true;
+            }
+            continue;
+          }
+        }
+        if (casting) continue;
         if (Math.random() > this.d.abil) continue;
         const enemies = A.enemiesIn(g, h, h.x, h.y, 10 * T, { visible: true }).filter((u) => !g.players[u.owner].isNeutral || (h.order && h.order.type === 'attack'));
-        const hpF = h.hp / h.maxHp;
         for (const abId of h.def.abilities) {
           const ab = AC.ABILITIES[abId];
           if (!A.canCast(g, h, abId).ok) continue;
           const c = this.decide(h, ab, enemies, hpF);
           if (c) { this.cmd(Object.assign({ type: 'cast', ids: [h.id], ab: abId }, c)); break; }
-        }
-        // retreat low heroes without recall
-        if (h.def.hero && hpF < 0.22 && enemies.length && this.mainHq && !(h.order && h.order.type === 'cast')) {
-          const recall = h.def.abilities.find((a) => AC.ABILITIES[a].ai === 'retreat');
-          if (!recall || !A.canCast(g, h, recall).ok) this.cmd({ type: 'move', ids: [h.id], x: this.mainHq.x, y: this.mainHq.y + 3 * T });
         }
       }
     }

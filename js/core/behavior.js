@@ -39,6 +39,7 @@
     for (let i = 0; i < list.length; i++) {
       const t = list[i];
       if (t === e || t.dead || !g.areEnemies(e.owner, t.owner)) continue;
+      if (t.id === e.unreach && g.time < e.unreachT) continue;
       // leave peaceful wild creatures alone unless they are fighting us (or we hunt them)
       if (!neutralSeeker && g.players[t.owner].isNeutral && !(opts && opts.creeps) && !(t.order && t.order.type === 'attack')) continue;
       const d2 = U.dist2(t.x, t.y, e.x, e.y);
@@ -56,6 +57,7 @@
       for (let i = 0; i < bl.length; i++) {
         const t = bl[i];
         if (t.dead || !g.areEnemies(e.owner, t.owner)) continue;
+        if (t.id === e.unreach && g.time < e.unreachT) continue;
         const d = g.edgeDist(t, e.x, e.y);
         if (d > r) continue;
         if (!B.canTarget(g, e, t)) continue;
@@ -245,6 +247,22 @@
   }
   B.engage = engage;
 
+  // A chase that has not closed in for 4 seconds is given up, and the target ignored for a
+  // while. Orders the unit picked for itself give up on anything (a faster foe, a press of
+  // bodies); a direct order only on a target standing where the unit cannot go (a ranger
+  // deep in a forest, a sniper on a cliff).
+  function chaseStalled(g, e, t, strict) {
+    const gap = B.gap(g, e, t);
+    const c = e.chase || (e.chase = { id: 0, best: 0, t: 0 });
+    if (c.id !== t.id || gap <= B.range(e) || gap < c.best - 6) { c.id = t.id; c.best = gap; c.t = g.time; return false; }
+    if (g.time - c.t < 4) return false;
+    if (strict && (t.kind !== 'unit' || t.def.air || e.def.air || g.map.passableWorld(t.x, t.y, g.moveBits(e)))) return false;
+    c.id = 0;
+    e.unreach = t.id; e.unreachT = g.time + 10;
+    return true;
+  }
+  B.chaseStalled = chaseStalled;
+
   // ------------------------------------------------------------------ unit update
   B.updateUnit = function (g, e, dt) {
     const def = e.def;
@@ -286,7 +304,7 @@
           const nt = B.findTarget(g, e, def.sight * T * 0.9, o.creeps ? { creeps: true } : null);
           if (nt && (!t || B.gap(g, e, nt) + 40 < B.gap(g, e, t))) { t = nt; e.subTarget = nt.id; e.path = null; }
         }
-        if (t) { if (!engage(g, e, t, dt)) { e.subTarget = 0; e.path = null; } break; }
+        if (t) { if (!engage(g, e, t, dt) || chaseStalled(g, e, t, false)) { e.subTarget = 0; e.path = null; } break; }
         if (moveToward(g, e, o.x, o.y, o.arrive || 8, dt)) {
           if (o.type === 'patrol') {
             const ax = o.ax, ay = o.ay;
@@ -316,6 +334,9 @@
         }
         o.lostT = 0;
         engage(g, e, t, dt);
+        if (chaseStalled(g, e, t, !o.auto)) {
+          if (o.auto) { e.order = { type: 'move', x: o.homeX, y: o.homeY, arrive: 20, auto: true }; stopMoving(e); } else nextOrder(g, e);
+        }
         break;
       }
       case 'hold': {
@@ -335,6 +356,18 @@
       case 'follow': {
         const t = g.get(o.target);
         if (!t || t.dead) { nextOrder(g, e); break; }
+        // fighters that follow (summoned hounds, Hendrake warriors, escorts) fight near their leader
+        if (def.dmg && def.role !== 'worker') {
+          let st = e.subTarget ? g.get(e.subTarget) : null;
+          if (st && (!B.canTarget(g, e, st) || Math.hypot(st.x - t.x, st.y - t.y) > 8 * T)) { st = null; e.subTarget = 0; e.path = null; }
+          e.scanT = (e.scanT || 0) - dt;
+          if (!st && e.scanT <= 0) {
+            e.scanT = 0.3 + Math.random() * 0.1;
+            const nt = B.findTarget(g, e, def.sight * T * 0.8);
+            if (nt && Math.hypot(nt.x - t.x, nt.y - t.y) <= 8 * T) { st = nt; e.subTarget = nt.id; e.path = null; }
+          }
+          if (st) { engage(g, e, st, dt); break; }
+        }
         if (Math.hypot(t.x - e.x, t.y - e.y) > 2 * T + t.radius) {
           if (e.path && Math.hypot(e.pathGoalX - t.x, e.pathGoalY - t.y) > 48) e.path = null;
           moveToward(g, e, t.x, t.y, t.radius + e.radius + 20, dt);
@@ -425,11 +458,11 @@
   }
 
   // ------------------------------------------------------------------ economy
-  B.findResource = function (g, e, x, y, maxD, avoidBusy) {
+  B.findResource = function (g, e, x, y, maxD, avoidBusy, exclude) {
     let best = null, bs = 1e18;
     const own = e.order && e.order.type === 'gather' ? e.order.target : 0;
     for (const r of g.resources) {
-      if (r.dead || r.amount <= 0) continue;
+      if (r.dead || r.amount <= 0 || r.id === exclude) continue;
       const d = Math.hypot(r.x - x, r.y - y);
       if (d > maxD) continue;
       let s = d;
@@ -448,24 +481,25 @@
     let r = g.get(o.target);
     if (!r || r.dead || r.amount <= 0) {
       if (r && r.miner === e.id) r.miner = 0;
-      r = B.findResource(g, e, o.lx || e.x, o.ly || e.y, 12 * T, true);
+      r = B.findResource(g, e, o.lx || e.x, o.ly || e.y, 12 * T, true, o.avoid);
       if (!r) {
         if (e.carry > 0) { e.order = { type: 'returnCargo', resume: 0 }; stopMoving(e); }
         else nextOrder(g, e);
         return;
       }
-      o.target = r.id; o.stage = 'go';
+      o.target = r.id; o.stage = 'go'; o.side = 0;
     }
     o.lx = r.x; o.ly = r.y;
     if (!o.stage) o.stage = e.carry >= e.def.carry ? 'ret' : 'go';
     if (o.stage === 'go') {
       if (e.carry >= e.def.carry) { o.stage = 'ret'; return; }
-      // approach from the side of the dropoff
+      // approach from the side of the dropoff; if that side is walled off, try the others in turn
       const dp = g.nearestDropoff(e.owner, r.x, r.y);
-      let ax = r.x, ay = r.y;
-      if (dp) { const a = Math.atan2(dp.y - r.y, dp.x - r.x); ax = r.x + Math.cos(a) * 24; ay = r.y + Math.sin(a) * 24; }
+      const a = (dp ? Math.atan2(dp.y - r.y, dp.x - r.x) : 0) + (o.side || 0) * (Math.PI / 2);
+      const ax = r.x + Math.cos(a) * 24, ay = r.y + Math.sin(a) * 24;
       const dd = Math.hypot(r.x - e.x, r.y - e.y);
-      if (dd <= e.radius + 30) {
+      const reach = e.radius + 38; // includes standing on a diagonal neighbour tile
+      if (dd <= reach) {
         if (r.miner && r.miner !== e.id) {
           const m = g.get(r.miner);
           if (!m || m.dead || !m.order || m.order.type !== 'gather' || m.order.target !== r.id || m.order.stage !== 'mine') r.miner = 0;
@@ -477,19 +511,25 @@
           if (o.waitT <= 0) {
             o.waitT = 0.4 + Math.random() * 0.3;
             const alt = B.findResource(g, e, r.x, r.y, 6 * T, true);
-            if (alt && alt !== r) { r.claims = Math.max(0, (r.claims || 1) - 1); alt.claims = (alt.claims || 0) + 1; o.target = alt.id; e.path = null; }
+            if (alt && alt !== r) { r.claims = Math.max(0, (r.claims || 1) - 1); alt.claims = (alt.claims || 0) + 1; o.target = alt.id; o.side = 0; e.path = null; }
           }
           return;
         }
         r.miner = e.id;
         o.stage = 'mine';
+        o.side = 0; o.avoid = 0;
         o.t = e.def.mineTime;
         stopMoving(e);
         e.angle = Math.atan2(r.y - e.y, r.x - e.x);
       } else {
-        if (moveToward(g, e, ax, ay, 6, dt) && dd > e.radius + 30) {
-          // could not get adjacent from preferred side: try direct
-          if (Math.hypot(r.x - e.x, r.y - e.y) > e.radius + 30) { e.path = null; o.side = (o.side || 0) + 1; if (o.side > 3) { r.miner = 0; o.target = 0; } }
+        if (moveToward(g, e, ax, ay, 6, dt) && Math.hypot(r.x - e.x, r.y - e.y) > reach) {
+          // this side cannot be reached: try the next one; after all four, give this diamond up
+          e.path = null; e.repaths = 0;
+          o.side = (o.side || 0) + 1;
+          if (o.side > 3) {
+            if (r.miner === e.id) r.miner = 0;
+            o.avoid = r.id; o.target = 0; o.side = 0;
+          }
         }
       }
       return;

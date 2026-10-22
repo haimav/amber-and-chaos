@@ -6,10 +6,30 @@
   const T = AC.TILE;
   const G = AC.Game.prototype;
 
+  // Orders that never finish on their own: queueing behind them would wait forever.
+  const ENDLESS = { gather: 1, patrol: 1, hold: 1, follow: 1 };
+  AC.QUEUE_MAX = 16;
+
+  // Give unit u an order (or queue it). Returns false if the order could not be accepted.
   function issue(g, u, order, queue) {
-    if (queue && (u.order || u.queue.length)) {
-      if (u.queue.length < 16) u.queue.push(order);
-      return;
+    if (queue && order) {
+      // a worker that is gathering does the queued job first, then goes back to its diamonds
+      if (u.order && ENDLESS[u.order.type] && !u.queue.length) {
+        const resume = u.order.type === 'gather' ? { type: 'gather', target: u.order.target, resumed: true } : null;
+        if (u.order.type === 'gather') g.releaseMiner(u);
+        u.order = order;
+        u.path = null; u.repaths = 0; u.subTarget = 0; u.stuckN = 0;
+        if (resume) u.queue.push(resume);
+        return true;
+      }
+      if (u.order || u.queue.length) {
+        if (u.queue.length >= AC.QUEUE_MAX) return false;
+        // keep an automatic return-to-gathering at the end of the queue
+        const last = u.queue[u.queue.length - 1];
+        if (last && last.resumed) u.queue.splice(u.queue.length - 1, 0, order);
+        else u.queue.push(order);
+        return true;
+      }
     }
     if (u.order && u.order.type === 'gather') g.releaseMiner(u);
     if (u.order && u.order.type === 'build' && u.order.paid && !u.order.placed) {
@@ -19,8 +39,18 @@
     u.order = order;
     u.queue.length = 0;
     u.path = null; u.repaths = 0; u.subTarget = 0; u.stuckN = 0;
+    return true;
   }
   AC.issue = issue;
+  // unplaced, paid build orders of a given type held by a player's workers
+  function pendingBuilds(g, pid, defId) {
+    let n = 0;
+    for (const u of g.units) {
+      if (u.dead || u.owner !== pid || u.def.role !== 'worker') continue;
+      for (const o of [u.order, ...u.queue]) if (o && o.type === 'build' && !o.placed && o.def === defId) n++;
+    }
+    return n;
+  }
 
   // Assign formation slots around (x,y)
   function formation(g, units, x, y) {
@@ -143,7 +173,7 @@
         const workers = units.filter((u) => u.def.role === 'worker');
         if (!workers.length) return err('Only workers can build.');
         if (!g.meetsReq(pid, def)) return err('Requires ' + g.missingReq(pid, def).join(', ') + '.');
-        if ((def.id === 'castle' || def.id === 'spire') && g.hasBuilding(pid, def.id)) return err('There can be only one ' + def.name + '.');
+        if ((def.id === 'castle' || def.id === 'spire') && (g.hasBuilding(pid, def.id) || pendingBuilds(g, pid, def.id))) return err('There can be only one ' + def.name + '.');
         const chk = g.canPlace(pid, def.id, c.tx, c.ty, workers[0].id);
         if (!chk.ok) return err(chk.why);
         if (!g.canAfford(p, def.cost)) return err(p.res.d < def.cost.d ? 'Not enough diamonds.' : 'Not enough ' + p.F.power + '.');
@@ -151,8 +181,9 @@
         const cx = (c.tx + def.size / 2) * T, cy = (c.ty + def.size / 2) * T;
         let w = workers[0], bd = 1e18;
         if (!c.queue) for (const u of workers) { const d = U.dist2(u.x, u.y, cx, cy); if (d < bd) { bd = d; w = u; } }
+        if (c.queue && w.queue.length >= AC.QUEUE_MAX) return err('That worker has too many orders.');
         g.pay(p, def.cost);
-        issue(g, w, { type: 'build', def: def.id, tx: c.tx, ty: c.ty, paid: true }, c.queue);
+        if (!issue(g, w, { type: 'build', def: def.id, tx: c.tx, ty: c.ty, paid: true }, c.queue)) { g.refund(p, def.cost); return err('That worker has too many orders.'); }
         g.sfx('place', cx, cy);
         return true;
       }

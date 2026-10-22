@@ -88,9 +88,8 @@
       if (taunt && !m.stunned) {
         const by = g.get(taunt.by);
         if (by && !by.dead && (!e.order || e.order.target !== by.id) && e.def.dmg && !(by.def.air && !e.def.canHitAir)) {
-          e.order = { type: 'attack', target: by.id };
-          e.queue.length = 0;
-          e.path = null;
+          // an auto (leashed) attack, so the unit gives up the chase once the taunt is over
+          AC.issue(g, e, { type: 'attack', target: by.id, auto: true, homeX: e.x, homeY: e.y }, false);
         }
       }
     }
@@ -132,9 +131,18 @@
       return;
     }
     if (ab.target === 'none') { A.execute(g, e, ab, o); return; }
+    // give up if the caster stops getting closer (target out of reach, e.g. deep in a forest)
+    const stalled = (d) => {
+      if (o.best == null || d < o.best - 6) { o.best = d; o.bestT = g.time; return false; }
+      if (g.time - o.bestT < 4) return false;
+      if (!o.silent) g.emit({ type: 'error', player: e.owner, text: 'Cannot reach the target.' });
+      B().nextOrder(g, e);
+      return true;
+    };
     if (ab.target === 'point') {
       const d = Math.hypot(o.x - e.x, o.y - e.y);
       if (d <= ab.range) { A.execute(g, e, ab, o); return; }
+      if (stalled(d)) return;
       B().moveToward(g, e, o.x, o.y, ab.range - 8, dt);
       return;
     }
@@ -147,6 +155,7 @@
       }
       const gap = B().gap(g, e, t);
       if (gap <= ab.range) { A.execute(g, e, ab, o); return; }
+      if (stalled(gap)) return;
       if (e.path && Math.hypot(e.pathGoalX - t.x, e.pathGoalY - t.y) > 30) e.path = null;
       B().moveToward(g, e, t.x, t.y, 2, dt);
     }
@@ -324,7 +333,7 @@
         g.fx('puff', { x: e.x, y: e.y, color: '#244' });
         g.sfx('vanish', e.x, e.y);
         // enemies lose their target
-        for (const u of g.units) if (!u.dead && u.order && u.order.target === e.id && g.areEnemies(u.owner, e.owner)) { u.order = null; u.path = null; }
+        for (const u of g.units) if (!u.dead && u.order && u.order.target === e.id && g.areEnemies(u.owner, e.owner)) AC.issue(g, u, null, false);
         break;
       case 'trump_summons': {
         const hq = g.hq(e.owner);
@@ -451,8 +460,9 @@
       case 'possess': {
         if (!t) break;
         const old = t.owner;
+        AC.issue(g, t, null, false); // refunds its paid builds and frees its diamond, for the old owner
         t.owner = e.owner;
-        t.order = null; t.queue.length = 0; t.path = null; t.buffs.length = 0;
+        t.buffs.length = 0;
         if (t.def.role === 'worker') t.carry = 0;
         g.fx('possess', { x0: e.x, y0: e.y, x1: t.x, y1: t.y });
         g.sfx('possess', t.x, t.y);

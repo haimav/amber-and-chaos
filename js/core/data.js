@@ -436,9 +436,9 @@
     spire: {
       name: 'Thelbane Spire', faction: 'chaos', size: 4, hp: 3200, armor: 5, armorType: 'fortified',
       cost: { d: 450, p: 0 }, time: 90, supply: 12, dropoff: true, sight: 11, power: 1.0, spread: 8,
-      trains: ['thrall'], hq: true, art: 'spire',
+      trains: ['thrall'], hq: true, art: 'spire', anywhere: true,
       attack: { dmg: 14, dmgType: 'magic', range: 200, cd: 1.4, projectile: 'wisp', canHitAir: true },
-      desc: 'A splinter of Thelbane, the great citadel of the Courts. The Black Road spreads from its roots.',
+      desc: 'A splinter of Thelbane, the great citadel of the Courts. The Black Road spreads from its roots. If it falls, another can be summoned anywhere.',
     },
     bastion: {
       name: 'Bastion of the Road', faction: 'chaos', size: 3, hp: 1800, armor: 4, armorType: 'fortified',
@@ -497,9 +497,9 @@
 
     // ---------------- Scenario structures
     the_circle: {
-      name: 'The Circle', faction: 'chaos', size: 4, hp: 4000, armor: 6, armorType: 'fortified',
+      name: 'The Circle', faction: 'chaos', size: 4, hp: 4000, armor: 6, armorType: 'fortified', invulnerable: true,
       cost: { d: 0, p: 0 }, time: 1, sight: 9, spread: 9, art: 'circle', scenarioOnly: true,
-      desc: 'A growing stain on the land of Lorraine that belches forth demons and drains life from the people.',
+      desc: 'A growing stain on the land of Lorraine that belches forth demons and drains life from the people. No blade can close it while its lord lives.',
     },
     brand_tower: {
       name: "Brand's Tower", faction: 'neutral', size: 3, hp: 99999, armor: 20, armorType: 'fortified', invulnerable: true,

@@ -71,10 +71,32 @@
     }
     return out;
   };
+  // A scripted hero arrives. If the player already called that hero, the one in the field
+  // is brought to the spot rather than doubled, and a copy waiting in a hall is sent back.
   S.hero = function (g, pid, id, x, y, level) {
-    const u = g.spawnUnit(id, pid, x, y);
-    if (level > 1) { u.level = level; u.xp = AC.HERO_LEVELS[level - 1]; g.applyLevel(u); u.hp = u.maxHp; u.mana = u.maxMana; }
+    const p = g.players[pid];
+    for (const b of g.buildings) {
+      if (b.dead || b.owner !== pid) continue;
+      for (let i = b.trainQ.length - 1; i >= 0; i--) {
+        if (b.trainQ[i].id !== id) continue;
+        g.refund(p, b.trainQ[i].cost || AC.UNITS[id].cost);
+        b.trainQ.splice(i, 1);
+      }
+    }
+    let u = g.units.find((e) => !e.dead && e.owner === pid && e.def.id === id);
+    if (u) {
+      AC.issue(g, u, null, false);
+      AC.Abilities.teleport(g, u, x, y, p.faction === 'chaos' ? '#c080ff' : '#ffe08a');
+    } else u = g.spawnUnit(id, pid, x, y);
+    if (level > 1 && (u.level || 1) < level) { u.level = level; u.xp = AC.HERO_LEVELS[level - 1]; g.applyLevel(u); }
+    u.hp = u.maxHp; u.mana = u.maxMana;
     return u;
+  };
+  // defenders of a stronghold: they fight whatever comes near, but the computer never
+  // sends them away in its attack waves
+  S.garrison = function (us) {
+    for (const u of us) { u.garrison = true; u.homeX = u.x; u.homeY = u.y; }
+    return us;
   };
   S.say = function (g, who, text, portrait, color, life) { g.emit({ type: 'dialog', who, text, portrait, color: color || 0, life }); };
   S.obj = function (g, id, text, opts) {
@@ -181,14 +203,12 @@
       const circle = g.spawnBuilding('the_circle', 1, 60, 12, true);
       g.spawnBuilding('hollow', 1, 66, 20, true);
       S.lay(g, 60, 16, 36, 40, 2);
-      const lord = g.spawnUnit('goat_lord', 1, 58 * T, 19 * T);
-      lord.homeX = lord.x; lord.homeY = lord.y;
       S.spawn(g, 1, [['demon', 6], ['crossbow', 2]], 56 * T, 20 * T);
       for (const u of g.units) if (u.owner === 1) u.order = { type: 'hold' };
       // wild things
       for (const [x, y] of [[30, 20], [58, 64], [10, 30]]) S.spawn(g, 2, [['shadow_wolf', 2]], x * T, y * T).forEach((u) => { u.homeX = u.x; u.homeY = u.y; });
       g.ais = [];
-      const sc = (g.scenario = { id: 'lorraine', customVictoryOnly: true, wave: 0, nextWave: 70, lordId: lord.id, circleId: circle.id, corwinId: corwin.id, keepId: keep.id, phase: 1 });
+      const sc = (g.scenario = { id: 'lorraine', customVictoryOnly: true, wave: 0, nextWave: 70, lordId: 0, circleId: circle.id, corwinId: corwin.id, keepId: keep.id, phase: 1 });
       S.obj(g, 'survive', 'Hold the keep of Lorraine until the assault breaks', { progress: '6:00' });
       S.obj(g, 'corwin', 'Corwin must survive');
       S.say(g, 'Ganelon', 'So. You came back, Corwin. The Circle grows every night. Tonight they come for the keep.', 'ganelon');
@@ -215,6 +235,12 @@
           }
           if (g.time >= 360) {
             sc.phase = 2;
+            // the lord of the Circle shows himself only when the assault breaks
+            const lord = g.spawnUnit('goat_lord', 1, 58 * T, 19 * T);
+            lord.homeX = lord.x; lord.homeY = lord.y;
+            lord.order = { type: 'hold' };
+            sc.lordId = lord.id;
+            g.fx('pattern', { x: lord.x, y: lord.y, r: 90 });
             S.done(g, 'survive');
             S.obj(g, 'lord', 'Ride to the Circle and slay the goat-faced lord');
             S.say(g, 'Ganelon', 'They falter! Now, while they reel, we ride for the Circle itself.', 'ganelon');
@@ -227,16 +253,30 @@
             const us = S.spawn(g, 1, [['demon', 4], ['stalker', 2]], 58 * T, 22 * T);
             S.waveAttack(g, us, 14 * T, 60 * T);
           }
-          // the lord is roused when enemies approach
-          if (lordU && !lordU.dead && !lordU.roused && g.units.some((u) => !u.dead && u.owner === 0 && Math.hypot(u.x - lordU.x, u.y - lordU.y) < 9 * T)) {
+        }
+        // the lord is roused when enemies come near or strike him, and fights for the Circle
+        if (lordU && !lordU.dead && sc.phase < 3 && g.tickN % 15 === 0) {
+          const foes = g.units.filter((u) => !u.dead && u.owner === 0 && !g.isStealthed(u) && Math.hypot(u.x - lordU.homeX, u.y - lordU.homeY) < 14 * T);
+          if (!lordU.roused && (lordU.hp < lordU.maxHp || foes.some((u) => Math.hypot(u.x - lordU.x, u.y - lordU.y) < 9 * T))) {
             lordU.roused = true;
             S.say(g, 'The Goat-Faced Lord', 'Opener! You granted us passage. Will you now deny it?', 'goat_lord', 1);
+          }
+          if (lordU.roused) {
+            const busy = lordU.order && (lordU.order.type === 'attack' || lordU.order.type === 'attackMove');
+            if (foes.length && !busy) {
+              foes.sort((a, b) => Math.hypot(a.x - lordU.x, a.y - lordU.y) - Math.hypot(b.x - lordU.x, b.y - lordU.y));
+              AC.issue(g, lordU, { type: 'attackMove', x: foes[0].x, y: foes[0].y }, false);
+            } else if (!foes.length && Math.hypot(lordU.x - lordU.homeX, lordU.y - lordU.homeY) > 3 * T && !(lordU.order && lordU.order.type === 'move')) {
+              // nothing left near the Circle: back to its rim
+              AC.issue(g, lordU, { type: 'move', x: lordU.homeX, y: lordU.homeY }, false);
+              lordU.queue.push({ type: 'hold' });
+            }
           }
         }
         if (sc.phase === 3 && g.time > sc.endT) sc.result = 0;
       };
       sc.onDeath = (g, e, src) => {
-        if (e.id === sc.lordId) {
+        if (sc.lordId && e.id === sc.lordId) {
           sc.phase = 3;
           S.done(g, 'lord');
           S.say(g, 'Corwin', 'The way is closed. Lorraine will heal, in time.', 'corwin');
@@ -323,7 +363,7 @@
       // the garrison of the stronghold
       const hardK = opts.difficulty === 'hard' ? 1.4 : opts.difficulty === 'easy' ? 0.6 : 0.85;
       const k = (n) => Math.max(1, Math.round(n * hardK));
-      S.spawn(g, 1, [['demon', k(12)], ['crossbow', k(8)], ['hellmaid', k(3)], ['manticore', k(2)], ['wyvern', k(2)]], 74 * T, 50 * T);
+      S.garrison(S.spawn(g, 1, [['demon', k(12)], ['crossbow', k(8)], ['hellmaid', k(3)], ['manticore', k(2)], ['wyvern', k(2)]], 74 * T, 50 * T));
       g.spawnBuilding('pit', 1, 88, 38, true);
       g.spawnBuilding('den', 1, 88, 58, true);
       g.spawnBuilding('serpent_eye', 1, 72, 44, true);
@@ -518,8 +558,8 @@
       S.hero(g, 1, 'borel', 82 * T, 58 * T, 4);
       const hk = opts.difficulty === 'hard' ? 1.4 : opts.difficulty === 'easy' ? 0.65 : 1;
       const k = (n) => Math.max(1, Math.round(n * hk));
-      S.spawn(g, 1, [['demon', k(9)], ['crossbow', k(7)], ['hellmaid', k(3)], ['manticore', k(2)], ['wyvern', k(2)], ['spitter', k(1)]], 72 * T, 56 * T);
-      S.spawn(g, 1, [['demon', k(4)], ['crossbow', k(3)], ['manticore', 1]], 84 * T, 50 * T);
+      S.garrison(S.spawn(g, 1, [['demon', k(9)], ['crossbow', k(7)], ['hellmaid', k(3)], ['manticore', k(2)], ['wyvern', k(2)], ['spitter', k(1)]], 72 * T, 56 * T));
+      S.garrison(S.spawn(g, 1, [['demon', k(4)], ['crossbow', k(3)], ['manticore', 1]], 84 * T, 50 * T));
       spire.maxHp = spire.hp = 5000;
       const ai = new AC.AI(g, 1, { firstWave: 300, noCreep: true });
       ai.rally = { x: 70 * T, y: 56 * T };
@@ -629,8 +669,8 @@
       S.field(g, 12, 48, Math.PI, 6, 6, 1500);
       for (let k = 0; k < 10; k++) { const w = g.spawnUnit('steward', 1, 12 * T + (k % 5) * 20, 44 * T); const r = AC.Behavior.findResource(g, w, castle.x, castle.y, 12 * T); if (r) w.order = { type: 'gather', target: r.id }; }
       const julian = S.hero(g, 1, 'julian', 43 * T, 32 * T, 3);
-      S.spawn(g, 1, [['ranger', 6], ['hellhound', 4]], 42 * T, 34 * T).forEach((u) => (u.order = { type: 'hold' }));
-      S.spawn(g, 1, [['guard', 6], ['ranger', 4]], 24 * T, 48 * T);
+      S.garrison(S.spawn(g, 1, [['ranger', 6], ['hellhound', 4]], 42 * T, 34 * T)).forEach((u) => (u.order = { type: 'hold' }));
+      S.garrison(S.spawn(g, 1, [['guard', 6], ['ranger', 4]], 24 * T, 48 * T));
       const pattern = g.spawnSite(17, 48, 'The Pattern');
       pattern.noCapture = true; pattern.isPattern = true;
       const ai = new AC.AI(g, 1, { firstWave: 420, noCreep: true, noExpand: true });
@@ -647,11 +687,17 @@
         S.runTimers(g);
         const d = g.units.find((u) => !u.dead && u.owner === 0 && u.def.id === 'dara');
         const pt = g.get(sc.patternId);
-        if (d && pt && Math.hypot(d.x - pt.x, d.y - pt.y) < 2.4 * T) {
+        const arden = S.getObj(g, 'lodge');
+        const onPattern = d && pt && Math.hypot(d.x - pt.x, d.y - pt.y) < 2.4 * T;
+        if (onPattern && !(arden && arden.done)) {
+          // Julian's riders would be on her before the First Veil
+          if (!sc.toldLodge) { sc.toldLodge = true; S.say(g, 'Dara', 'Not yet. While Arden stands, Julian\'s riders will reach me before the First Veil. Burn the lodge first.', 'dara', 1); }
+        } else if (onPattern) {
           if (!sc.walk) { S.say(g, 'Dara', 'The First Veil… it is like walking through lead. I will not stop.', 'dara', 1); g.message('Dara walks the Pattern! Keep her alive!', { kind: 'warn' }); }
           sc.walk += AC.TICK;
           if (g.tickN % 15 === 0) g.fx('pattern', { x: pt.x, y: pt.y, r: 70 });
         } else if (sc.walk > 0) sc.walk = Math.max(0, sc.walk - AC.TICK * 0.5);
+        if (!onPattern) sc.toldLodge = false;
         const o = S.getObj(g, 'walk');
         const p = sc.walk > 0 ? Math.floor(sc.walk) + ' / 30s' : '';
         if (o.progress !== p) { o.progress = p; g.emit({ type: 'objectives' }); }

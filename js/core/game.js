@@ -668,7 +668,8 @@
               this.emit({ type: 'siteLost', site: s.id, player: old });
             }
           } else {
-            if (s.capBy !== pid) { s.capBy = pid; s.capProgress = 0; }
+            // a fresh claim starts over only when a different team takes up the capture
+            if (s.capBy < 0 || !this.players[s.capBy] || this.players[s.capBy].team !== team) { s.capBy = pid; s.capProgress = 0; }
             s.capProgress += dt / 8;
             if (s.capProgress >= 1) {
               s.capProgress = 1; s.capOwner = pid; s.capBy = -1;
@@ -706,8 +707,8 @@
       a = Math.max(type === 'true' ? 0 : 0.5, a);
       target.hp -= a;
       target.lastHitT = this.time;
+      if (src && (src.kind === 'unit' || src.kind === 'building')) target.lastAttacker = src.id;
       if (src && src.kind === 'unit') {
-        target.lastAttacker = src.id;
         if (src.mods && src.mods.lifesteal) src.hp = Math.min(src.maxHp, src.hp + a * src.mods.lifesteal);
       }
       // alerts
@@ -747,7 +748,7 @@
           this.emit({ type: 'heroDied', player: p.id, hero: e.def.id, x: e.x, y: e.y });
         }
         if (e.order && e.order.type === 'gather') this.releaseMiner(e);
-        if (e.order && e.order.type === 'build' && e.order.paid && !e.order.placed && p) this.refund(p, AC.BUILDINGS[e.order.def].cost);
+        if (p) for (const o of [e.order, ...e.queue]) if (o && o.type === 'build' && o.paid && !o.placed) this.refund(p, AC.BUILDINGS[o.def].cost);
       } else if (e.kind === 'building') {
         if (p) p.stats.bLost++;
         if (sp && sp !== p) sp.stats.razed++;
@@ -757,7 +758,7 @@
         for (let y = e.ty; y < e.ty + e.size; y++)
           for (let x = e.tx; x < e.tx + e.size; x++) if (m.inb(x, y) && m.occ[y * m.w + x] === e.id) m.occ[y * m.w + x] = 0;
         // refund queued production
-        if (p) for (const q of e.trainQ) this.refund(p, AC.UNITS[q.id].cost);
+        if (p) for (const q of e.trainQ) this.refund(p, q.cost || AC.UNITS[q.id].cost);
         if (e.research && p) { this.refund(p, AC.UPGRADES[e.research.id].cost); delete p.researching[e.research.id]; }
         this.covDirty = true;
         this._incomeCache = null;
