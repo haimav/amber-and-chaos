@@ -36,12 +36,24 @@
     for (let i = 0; i < pts.length - 1; i++) m.line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], w, ter);
   };
   S.field = function (g, cx, cy, ang, n, dist, amount) {
+    const m = g.map;
+    const free = (x, y) => {
+      if (x < 2 || y < 2 || x > m.w - 3 || y > m.h - 3) return false;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (m.occ[(y + dy) * m.w + x + dx]) return false;
+      return true;
+    };
     for (let i = 0; i < n; i++) {
       const a = ang + (i - (n - 1) / 2) * (1.4 / Math.max(1, n - 1));
-      const d = dist + (i % 2) * 0.9;
-      const x = Math.round(cx + Math.cos(a) * d), y = Math.round(cy + Math.sin(a) * d);
-      g.map.disc(x, y, 1.5, TER.SAND);
-      g.spawnResource(x, y, amount || 1500);
+      let placed = false;
+      for (const dd of [0, 1, -1, 2, 3, -2]) {
+        const d = dist + (i % 2) * 0.9 + dd;
+        const x = Math.round(cx + Math.cos(a) * d), y = Math.round(cy + Math.sin(a) * d);
+        if (!free(x, y)) continue;
+        m.disc(x, y, 1.5, TER.SAND);
+        g.spawnResource(x, y, amount || 1500);
+        placed = true;
+        break;
+      }
     }
   };
   S.spawn = function (g, pid, list, x, y, opts) {
@@ -289,7 +301,8 @@
       S.field(g, 52, 28, -Math.PI / 2, 6, 4, 1300);
       S.field(g, 52, 70, Math.PI / 2, 6, 4, 1300);
       for (let k = 0; k < 8; k++) { const w = g.spawnUnit('steward', 0, 17 * T + (k % 4) * 22, 44 * T + Math.floor(k / 4) * 22); const r = AC.Behavior.findResource(g, w, castle.x, castle.y, 12 * T); if (r) w.order = { type: 'gather', target: r.id }; }
-      S.spawn(g, 0, [['guard', 6], ['ranger', 4]], 27 * T, 48 * T);
+      S.spawn(g, 0, [['guard', 8], ['ranger', 6]], 27 * T, 48 * T);
+      if (opts.difficulty !== 'hard') { g.spawnBuilding('lighthouse', 0, 19, 40, true); g.spawnBuilding('lighthouse', 0, 19, 56, true); }
       const corwin = S.hero(g, 0, 'corwin', 40 * T, 64 * T, 3);
       S.spawn(g, 0, [['rifleman', 8]], 40 * T, 67 * T);
       g.spawnSite(52, 28, 'Broken Pattern of Arden\'s Edge');
@@ -308,7 +321,7 @@
       S.field(g, 82, 50, 0, 7, 7, 1500);
       for (let k = 0; k < 10; k++) { const w = g.spawnUnit('thrall', 1, 82 * T + (k % 5) * 20, 47 * T + Math.floor(k / 5) * 20); const r = AC.Behavior.findResource(g, w, 82 * T, 50 * T, 12 * T); if (r) w.order = { type: 'gather', target: r.id }; }
       // the garrison of the stronghold
-      const hardK = opts.difficulty === 'hard' ? 1.5 : opts.difficulty === 'easy' ? 0.6 : 1;
+      const hardK = opts.difficulty === 'hard' ? 1.4 : opts.difficulty === 'easy' ? 0.6 : 0.85;
       const k = (n) => Math.max(1, Math.round(n * hardK));
       S.spawn(g, 1, [['demon', k(12)], ['crossbow', k(8)], ['hellmaid', k(3)], ['manticore', k(2)], ['wyvern', k(2)]], 74 * T, 50 * T);
       g.spawnBuilding('pit', 1, 88, 38, true);
@@ -319,8 +332,9 @@
       const siege = S.spawn(g, 1, [['manticore', 2], ['wyvern', 2], ['demon', 6], ['crossbow', 4]], 40 * T, 49 * T);
       for (const u of siege) { u.order = { type: 'attackMove', x: 31 * T, y: 48 * T }; u.homeX = 33 * T; u.homeY = 48 * T; }
       for (const [x, y] of [[34, 22], [64, 80]]) S.spawn(g, 2, [['wild_manticore', 1]], x * T, y * T).forEach((u) => { u.homeX = u.x; u.homeY = u.y; });
-      const ai = new AC.AI(g, 1, { firstWave: 300, noCreep: true });
+      const ai = new AC.AI(g, 1, { firstWave: opts.difficulty === 'hard' ? 300 : 400, noCreep: true });
       ai.rally = { x: 70 * T, y: 50 * T };
+      castle.maxHp = castle.hp = 5200; // the heart of Amber is not easily breached
       g.get(g.buildings.find((b) => b.def.id === 'spire' && b.owner === 1).id).maxHp = 4800;
       for (const b of g.buildings) if (b.def.id === 'spire' && b.owner === 1) b.hp = b.maxHp;
       g.ais.push(ai);
@@ -578,7 +592,7 @@
       S.noise(m, 41, 0.085, 0.56, TER.FOREST, (x) => x > 26 && x < 70);
       S.noise(m, 43, 0.1, 0.7, TER.FOREST);
       m.disc(14, 48, 15, TER.ROCK, 2.5, true);
-      m.disc(13, 48, 8, TER.GRASS, 1, true);
+      m.disc(14, 48, 10, TER.GRASS, 1, true);
       S.path(m, [[20, 48], [30, 48]], 2, TER.DIRT);
       m.disc(84, 48, 11, TER.ASH, 1.5, true);
       m.disc(42, 30, 6, TER.GRASS); m.disc(56, 66, 6, TER.GRASS); m.disc(34, 48, 6, TER.GRASS); m.disc(64, 40, 6, TER.GRASS);

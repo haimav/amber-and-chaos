@@ -151,18 +151,19 @@
     renderChunk(cx, cy, scale) {
       const m = this.map;
       const W = m.w;
+      const HALF = CPX / 2; // ground colour is computed at half resolution, then smoothed up
       const base = this._base || (this._base = document.createElement('canvas'));
-      base.width = CPX; base.height = CPX;
+      if (base.width !== HALF) { base.width = HALF; base.height = HALF; }
       const bctx = base.getContext('2d');
-      const img = bctx.createImageData(CPX, CPX);
+      const img = this._baseImg || (this._baseImg = bctx.createImageData(HALF, HALF));
       const d = img.data;
       const tc = this.tileCol;
       const nz = this.noise;
       const ox = cx * CPX, oy = cy * CPX;
-      for (let py = 0; py < CPX; py += 1) {
-        const wy = oy + py;
-        for (let px = 0; px < CPX; px += 1) {
-          const wx = ox + px;
+      for (let py = 0; py < HALF; py++) {
+        const wy = oy + py * 2 + 1;
+        for (let px = 0; px < HALF; px++) {
+          const wx = ox + px * 2 + 1;
           const j = nz.noise(wx * 0.06, wy * 0.06) - 0.5;
           let fx = wx / T - 0.5 + j * 0.7, fy = wy / T - 0.5 + (nz.noise(wx * 0.06 + 50, wy * 0.06 + 50) - 0.5) * 0.7;
           let x0 = Math.floor(fx), y0 = Math.floor(fy);
@@ -174,8 +175,8 @@
           x0 = Math.min(W - 1, Math.max(0, x0)); y0 = Math.min(m.h - 1, Math.max(0, y0));
           const i00 = (y0 * W + x0) * 3, i10 = (y0 * W + x1) * 3, i01 = (y1 * W + x0) * 3, i11 = (y1 * W + x1) * 3;
           const w00 = (1 - ax) * (1 - ay), w10 = ax * (1 - ay), w01 = (1 - ax) * ay, w11 = ax * ay;
-          const tex = 0.86 + nz.noise(wx * 0.11, wy * 0.11) * 0.2 + (U.hash2(wx, wy, 3) - 0.5) * 0.07;
-          const o = (py * CPX + px) * 4;
+          const tex = 0.86 + nz.noise(wx * 0.11, wy * 0.11) * 0.2 + (U.hash2(wx, wy, 3) - 0.5) * 0.08;
+          const o = (py * HALF + px) * 4;
           d[o] = (tc[i00] * w00 + tc[i10] * w10 + tc[i01] * w01 + tc[i11] * w11) * tex;
           d[o + 1] = (tc[i00 + 1] * w00 + tc[i10 + 1] * w10 + tc[i01 + 1] * w01 + tc[i11 + 1] * w11) * tex;
           d[o + 2] = (tc[i00 + 2] * w00 + tc[i10 + 2] * w10 + tc[i01 + 2] * w01 + tc[i11 + 2] * w11) * tex;
@@ -334,20 +335,25 @@
       return this.renderChunk(cx, cy, scale);
     }
     evictChunks() {
-      const max = 110;
+      const max = 260;
       if (this.chunks.size <= max) return;
       const arr = [...this.chunks.entries()].sort((a, b) => a[1].used - b[1].used);
       for (let i = 0; i < arr.length - max; i++) this.chunks.delete(arr[i][0]);
     }
-    prewarm(n) {
-      // render chunks around the camera before play starts
+    prewarm(all) {
+      // render terrain chunks before play starts (the whole map when `all`), so scrolling never stalls
       this.frameN = (this.frameN || 0) + 1;
-      this.chunkBudget = n || 40;
-      const [x0, y0] = this.toWorld(0, 0), [x1, y1] = this.toWorld(this.vw, this.vh);
-      for (let cy = Math.max(0, Math.floor(y0 / CPX)); cy <= Math.min(Math.ceil(this.map.h / CHUNK) - 1, Math.floor(y1 / CPX)); cy++)
-        for (let cx = Math.max(0, Math.floor(x0 / CPX)); cx <= Math.min(Math.ceil(this.map.w / CHUNK) - 1, Math.floor(x1 / CPX)); cx++) this.getChunk(cx, cy);
+      this.chunkBudget = 1e9;
+      const nx = Math.ceil(this.map.w / CHUNK), ny = Math.ceil(this.map.h / CHUNK);
+      if (all) {
+        for (let cy = 0; cy < ny; cy++) for (let cx = 0; cx < nx; cx++) this.getChunk(cx, cy);
+      } else {
+        const [x0, y0] = this.toWorld(0, 0), [x1, y1] = this.toWorld(this.vw, this.vh);
+        for (let cy = Math.max(0, Math.floor(y0 / CPX)); cy <= Math.min(ny - 1, Math.floor(y1 / CPX)); cy++)
+          for (let cx = Math.max(0, Math.floor(x0 / CPX)); cx <= Math.min(nx - 1, Math.floor(x1 / CPX)); cx++) this.getChunk(cx, cy);
+      }
+      this.chunkBudget = 0;
     }
-
     // ------------------------------------------------------------------ fog
     updateFog() {
       const g = this.game, p = g.players[g.localPlayer];
@@ -369,7 +375,7 @@
       const g = this.game, ctx = this.ctx;
       this.time += dt || 0;
       this.frameN = (this.frameN || 0) + 1;
-      this.chunkBudget = this.frameN < 3 ? 60 : 3;
+      this.chunkBudget = this.frameN < 3 ? 60 : 2;
       const z = this.cam.zoom, dpr = this.dpr;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = '#05060a';

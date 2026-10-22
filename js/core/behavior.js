@@ -70,10 +70,17 @@
   function requestPath(g, e, gx, gy) {
     e.pathGoalX = gx; e.pathGoalY = gy;
     if (e.def.air) { e.path = [[gx, gy]]; e.pathI = 0; return; }
+    const bits = g.moveBits(e);
+    // a clear straight line needs no search (most combat chases)
+    const d = Math.hypot(gx - e.x, gy - e.y);
+    if (d < 14 * T && g.map.passableWorld(gx, gy, bits) && g.pf.los(e.x, e.y, gx, gy, bits, e.radius)) {
+      e.path = [[gx, gy]]; e.pathI = 0; e.pathWait = false;
+      return;
+    }
     if (g.pathBudget <= 0) { e.path = null; e.pathWait = true; return; }
-    g.pathBudget--;
     e.pathWait = false;
-    const p = g.pf.find(e.x, e.y, gx, gy, g.moveBits(e), { radius: e.radius });
+    const p = g.pf.find(e.x, e.y, gx, gy, bits, { radius: e.radius, maxNodes: Math.min(9000, Math.max(1500, g.pathBudget)) });
+    g.pathBudget -= g.pf.lastExpanded || 1;
     e.path = p; e.pathI = 0;
   }
   B.requestPath = requestPath;

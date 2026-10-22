@@ -160,7 +160,7 @@
       this.entities.set(e.id, e);
       this.units.push(e);
       if (owner >= 0 && this.players[owner]) this.players[owner].supplyUsed += 0; // supply accounted at queue time
-      if (!def.air && !def.move) {
+      if (!def.air) {
         // nudge onto passable ground
         const tx = Math.floor(x / T), ty = Math.floor(y / T);
         if (!this.map.passable(tx, ty, this.moveBits(e))) {
@@ -336,12 +336,14 @@
           if (m.road[i]) roadTiles++;
         }
       if (chaos && !def.anywhere && roadTiles < s * s) return { ok: false, why: 'The works of Chaos must stand upon the Black Road.' };
-      // keep clear of resources
+      // keep clear of resources (they occupy tiles, so scan the surrounding rectangle)
       const clr = def.hq ? 3 : 1;
-      for (const r of this.resources) {
-        if (r.dead) continue;
-        if (r.tx >= tx - clr && r.tx < tx + s + clr && r.ty >= ty - clr && r.ty < ty + s + clr) return { ok: false, why: 'Too close to the diamond sands.' };
-      }
+      for (let y = ty - clr; y < ty + s + clr; y++)
+        for (let x = tx - clr; x < tx + s + clr; x++) {
+          if (!m.inb(x, y)) continue;
+          const o = m.occ[y * m.w + x];
+          if (o) { const e = this.entities.get(o); if (e && e.kind === 'resource') return { ok: false, why: 'Too close to the diamond sands.' }; }
+        }
       for (const st of this.sites) {
         if (Math.abs(st.tx - (tx + s / 2)) < 2 + s / 2 && Math.abs(st.ty - (ty + s / 2)) < 2 + s / 2) return { ok: false, why: 'A Broken Pattern cannot be built over.' };
       }
@@ -352,7 +354,8 @@
         if (seen === 0) return { ok: false, why: 'You cannot build in unexplored Shadow.' };
       }
       // no enemy units standing there
-      for (const u of this.units) {
+      const near = this.hash ? this.hash.query((tx + s / 2) * T, (ty + s / 2) * T, s * T, this._pq || (this._pq = [])) : this.units;
+      for (const u of near) {
         if (u.dead || u.def.air || u.id === ignoreUnitId) continue;
         if (u.x > tx * T - 4 && u.x < (tx + s) * T + 4 && u.y > ty * T - 4 && u.y < (ty + s) * T + 4) {
           if (this.areEnemies(pid, u.owner)) return { ok: false, why: 'Enemies are in the way.' };
@@ -366,7 +369,7 @@
       if (this.over && !this.opts.continueAfterOver) { this.time += dt; return; }
       this.time += dt;
       this.tickN++;
-      this.pathBudget = 48;
+      this.pathBudget = 5000; // A* nodes per tick
       for (const e of this.units) { e.prevX = e.x; e.prevY = e.y; }
       for (const p of this.projectiles) { p.prevX = p.x; p.prevY = p.y; }
       if (this.tickN === 1 || this.tickN % 15 === 0) this.recomputeSupply();

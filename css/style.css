@@ -85,6 +85,7 @@ i.ico.supply { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://ww
 .msg.warn { color: #ffcf70; border-color: rgba(255,180,80,0.4); }
 .msg.good { color: #b8ffc0; }
 .msg.info { color: var(--ink); }
+.msg.tip { color: #cfe6ff; border-color: rgba(140,190,255,0.35); font-style: italic; }
 
 #dialog { position: absolute; bottom: 214px; left: 50%; transform: translateX(-50%); width: min(720px, 80vw); display: flex; gap: 14px; align-items: center;
   background: linear-gradient(180deg, rgba(22,18,26,0.96), rgba(12,10,14,0.96)); border: 1px solid var(--accent); border-radius: 12px; padding: 10px 16px; cursor: pointer;

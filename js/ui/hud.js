@@ -107,6 +107,7 @@
         this.updateSelPanel();
         this.updateHeroBar();
         this.updateObjectives();
+        this.updateTips();
         if (this.hoverSlot >= 0 && this.buttons[this.hoverSlot]) this.showTip(this.hoverSlot, this.cmd.children[this.hoverSlot]);
       }
       this.updateDialog(dt);
@@ -120,6 +121,28 @@
     setText(id, v) {
       const el = this['_' + id] || (this['_' + id] = $(id));
       if (el && el._v !== v) { el._v = v; el.textContent = v; }
+    }
+
+    // ------------------------------------------------------------ tips for new players (skirmish)
+    updateTips() {
+      const g = this.g, p = this.me;
+      if (g.mode !== 'skirmish' || AC.settings.tips === false) return;
+      const amber = p.faction === 'amber';
+      const has = (id) => g.hasBuilding(p.id, id);
+      const TIPS = this._tips || (this._tips = [
+        { t: 4, text: amber ? 'Tip: your Stewards are already gathering diamonds. Select Castle Amber and press S to train more.' : 'Tip: your Thralls are already gathering diamonds. Select the Thelbane Spire and press S to spawn more.' },
+        { t: 30, cond: () => !has(p.F.supplyBldg), text: amber ? "Tip: select a Steward, press B, then H to build a Stewards' Hall. Each one raises your supply limit by 10." : 'Tip: select a Thrall, press B, then H to summon a Brood Hollow (+10 supply). Works of Chaos must stand on the Black Road.' },
+        { t: 70, cond: () => !has(amber ? 'barracks' : 'pit'), text: amber ? 'Tip: a Barracks of the Guard (B, then B) trains Guards and Knights of Avalon.' : 'Tip: a Demon Pit (B, then P) spawns Goat-Demons and Spined Stalkers.' },
+        { t: 120, cond: () => !has(p.F.heroHall), text: amber ? 'Tip: a Hall of Trumps (B, then T) lets you call the princes of Amber: Corwin, Benedict, Fiona and the rest.' : 'Tip: a Hall of the Houses (B, then T) summons the lords of Chaos: Dara, Brand, Borel and the rest.' },
+        { t: 175, cond: () => !g.sites.some((s) => s.capOwner === p.id), text: 'Tip: Broken Patterns, the glowing stone circles, yield ' + p.F.power + '. Claim one by keeping soldiers beside it with no enemies near.' },
+        { t: 240, text: 'Tip: two-finger click commands your units. Press A and click to attack-move. Option + a number makes a control group.' },
+        { t: 330, cond: () => !p.upgrades[amber ? 'jewel' : 'wave'], text: amber ? 'Tip: research the Jewel of Judgment at the Hall of Trumps, and any hero can call its storm with E.' : 'Tip: research the Wave of Chaos at the Hall of the Houses, and any lord can unleash it with E.' },
+      ]);
+      this.tipI = this.tipI || 0;
+      while (this.tipI < TIPS.length && g.time >= TIPS[this.tipI].t) {
+        const tip = TIPS[this.tipI++];
+        if (!tip.cond || tip.cond()) this.message(tip.text, 'tip', 11);
+      }
     }
 
     // ------------------------------------------------------------ messages & events

@@ -5,7 +5,7 @@
   const U = AC.util;
   const $ = (id) => document.getElementById(id);
 
-  const DEFAULTS = { masterVol: 0.8, musicVol: 0.5, sfxVol: 0.7, gameSpeed: 1, scrollSpeed: 1, wheel: 'auto', edgeScroll: true, alwaysBars: true, quality: 'high' };
+  const DEFAULTS = { masterVol: 0.8, musicVol: 0.5, sfxVol: 0.7, gameSpeed: 1, scrollSpeed: 1, wheel: 'auto', edgeScroll: true, alwaysBars: true, quality: 'high', tips: true };
   AC.settings = Object.assign({}, DEFAULTS, U.storage.get('settings', {}));
   AC.state = 'menu';
   AC.paused = false;
@@ -35,7 +35,9 @@
         const hero = game.units.find((u) => u.owner === me && u.def.hero);
         const focus = (m.kind === 'campaign' && hero) ? hero : hq || hero || game.units.find((u) => u.owner === me);
         if (focus) renderer.centerOn(focus.x, focus.y);
-        renderer.prewarm(60);
+        const tp = performance.now();
+        renderer.prewarm(true);
+        AC.prewarmMs = performance.now() - tp;
         AC.state = 'playing';
         AC.paused = false;
         acc = 0;

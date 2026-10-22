@@ -80,6 +80,7 @@
       const exactGoal = g0[0] === gtx && g0[1] === gty;
       [gtx, gty] = g0;
       this.count++;
+      this.lastExpanded = 1;
       if (stx === gtx && sty === gty) return [[exactGoal ? gx : gtx * T + T / 2, exactGoal ? gy : gty * T + T / 2]];
 
       const cur = ++this.cur;
@@ -150,11 +151,12 @@
             stamp[j] = cur; g[j] = ng; from[j] = i;
             const h = H(nx, ny);
             f[j] = ng + h;
-            push(j, ng + h * 1.001);
+            push(j, ng + h * 1.2);
             if (h < bestH) { bestH = h; best = j; }
           }
         }
       }
+      this.lastExpanded = expanded;
       const end = found ? gi : best;
       // reconstruct
       const tiles = [];
@@ -173,7 +175,8 @@
       for (let i = 0; i < pts.length; i++) {
         if (i === pts.length - 1) { out.push(pts[i]); break; }
         const nxt = pts[i + 1];
-        if (!this.los(ax, ay, nxt[0], nxt[1], bits, rad)) {
+        // keep sight-lines short so smoothing stays linear in path length
+        if (Math.abs(nxt[0] - ax) + Math.abs(nxt[1] - ay) > 12 * T || !this.los(ax, ay, nxt[0], nxt[1], bits, rad)) {
           out.push(pts[i]);
           ax = pts[i][0]; ay = pts[i][1];
         }

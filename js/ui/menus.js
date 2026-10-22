@@ -23,6 +23,7 @@
 
   // ------------------------------------------------------------------ title
   M.title = function () {
+    if (AC.game) return AC.quitToTitle();
     AC.state = 'menu';
     document.body.classList.remove('faction-chaos');
     $('titleCanvas').classList.remove('hidden');
@@ -295,13 +296,14 @@
       <div class="row"><label>Scroll gesture <select id="sWheel"><option value="auto">Automatic (trackpad pans, mouse wheel zooms)</option><option value="pan">Always pan</option><option value="zoom">Always zoom</option></select></label></div>
       <div class="row"><label class="chk"><input type="checkbox" id="sEdge"> Scroll at the screen edges</label></div>
       <div class="row"><label class="chk"><input type="checkbox" id="sBars"> Always show health bars of damaged units and heroes</label></div>
+      <div class="row"><label class="chk"><input type="checkbox" id="sTips"> Show tips in skirmish</label></div>
       <div class="row"><label>Graphics <select id="sQ"><option value="high">High (Retina)</option><option value="low">Low</option></select></label></div>
       <div class="row"><button id="back">Done</button></div></div>`);
     $('vM').value = s.masterVol; $('vMu').value = s.musicVol; $('vS').value = s.sfxVol; $('sSpeed').value = String(s.gameSpeed);
-    $('sScroll').value = s.scrollSpeed; $('sWheel').value = s.wheel; $('sEdge').checked = s.edgeScroll; $('sBars').checked = s.alwaysBars; $('sQ').value = s.quality;
+    $('sScroll').value = s.scrollSpeed; $('sWheel').value = s.wheel; $('sEdge').checked = s.edgeScroll; $('sBars').checked = s.alwaysBars; $('sQ').value = s.quality; $('sTips').checked = s.tips !== false;
     const save = () => {
       s.masterVol = +$('vM').value; s.musicVol = +$('vMu').value; s.sfxVol = +$('vS').value; s.gameSpeed = +$('sSpeed').value;
-      s.scrollSpeed = +$('sScroll').value; s.wheel = $('sWheel').value; s.edgeScroll = $('sEdge').checked; s.alwaysBars = $('sBars').checked;
+      s.scrollSpeed = +$('sScroll').value; s.wheel = $('sWheel').value; s.edgeScroll = $('sEdge').checked; s.alwaysBars = $('sBars').checked; s.tips = $('sTips').checked;
       const q = $('sQ').value;
       if (q !== s.quality) { s.quality = q; if (AC.renderer) { AC.renderer.chunks.clear(); AC.renderer.resize(); } }
       U.storage.set('settings', s);
