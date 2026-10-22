@@ -55,6 +55,17 @@
       this.screenShake = 0;
       this.resize();
     }
+    // free every cached canvas so a finished game releases its memory (Safari caps canvas memory)
+    destroy() {
+      const free = (c) => { if (c) { c.width = 0; c.height = 0; } };
+      for (const ch of this.chunks.values()) free(ch.canvas);
+      this.chunks.clear();
+      free(this.miniBase); free(this.roadCanvas); free(this.fogCanvas); free(this._base);
+      for (const s of this.roadSprites || []) free(s.canvas);
+      this.miniBase = this.roadCanvas = this.fogCanvas = this._base = null;
+      this.fx = []; this.decals = []; this.corpses = [];
+      this.game = null; this.map = null;
+    }
     resize() {
       const r = this.canvas.getBoundingClientRect();
       this.vw = Math.max(1, r.width); this.vh = Math.max(1, r.height);

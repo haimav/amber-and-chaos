@@ -44,11 +44,11 @@ and music, so there are no asset files at all.
 | Idle worker · whole army · home | `.` (or F1) · `,` (or F2) · Home / ⌫ |
 | Next unit kind's abilities | `Tab` |
 | Jump to the latest alert | `Space` |
-| Pause / cancel | `Esc` or F10 |
+| Pause / cancel | `Esc`, `` ` `` (the key left of 1) or F10. In full screen, Esc leaves full screen and pauses. |
 
 Settings (from the title screen or the pause menu) cover volumes, game speed,
-scroll speed, the scroll gesture (trackpad pans and mouse wheel zooms, or either
-one always), edge scrolling and Retina quality.
+scroll speed, the scroll gesture (two-finger scrolling pans by default; you can make
+the wheel always zoom instead), edge scrolling and Retina quality.
 
 ## The game
 

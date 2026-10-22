@@ -66,17 +66,27 @@
         b.addEventListener('mouseleave', () => { this.hoverSlot = -1; this.hideTip(); });
         this.cmd.appendChild(b);
       }
-      for (const id of ['menuBtn', 'idleBtn', 'fsBtn']) { $(id).tabIndex = -1; $(id).onmousedown = (e) => e.preventDefault(); }
-      $('menuBtn').onclick = () => AC.menus.pause();
-      $('idleBtn').onclick = () => AC.input.selectIdleWorker();
       this.resizeMinimap();
       this.objectives = $('objectives');
       this.objectives.innerHTML = '';
       this.msgs.innerHTML = '';
       $('dialog').classList.add('hidden');
-      this.sel.addEventListener('click', (e) => this.onSelClick(e));
-      this.sel.addEventListener('mousedown', (e) => e.stopPropagation());
-      this.heroBar.addEventListener('mousedown', (e) => e.stopPropagation());
+      HUD.bindPanels();
+    }
+    // Panel listeners are bound once for the page and delegate to the live HUD (AC.hud), so a new
+    // game never stacks listeners or keeps an old game alive. They act on pointerdown because the
+    // panels are re-rendered several times a second and a click could straddle a rebuild.
+    static bindPanels() {
+      if (HUD._bound) return;
+      HUD._bound = true;
+      const sel = $('selPanel'), bar = $('heroBar');
+      sel.addEventListener('pointerdown', (e) => { e.stopPropagation(); if (e.button === 0 && AC.hud) AC.hud.onSelClick(e); });
+      sel.addEventListener('mousedown', (e) => e.stopPropagation());
+      bar.addEventListener('pointerdown', (e) => { e.stopPropagation(); if (e.button === 0 && AC.hud) AC.hud.onHeroClick(e); });
+      bar.addEventListener('mousedown', (e) => e.stopPropagation());
+      for (const id of ['menuBtn', 'idleBtn', 'fsBtn']) { $(id).tabIndex = -1; $(id).addEventListener('mousedown', (e) => e.preventDefault()); }
+      $('menuBtn').addEventListener('click', () => AC.menus.pause());
+      $('idleBtn').addEventListener('click', () => AC.input.selectIdleWorker());
     }
     resizeMinimap() {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -88,8 +98,10 @@
     get me() { return this.g.players[this.g.localPlayer]; }
 
     // ------------------------------------------------------------ per-frame
-    update(dt) {
+    // dt is real time (UI refresh); gdt is game time, 0 while paused (speech and message timers)
+    update(dt, gdt) {
       const g = this.g, p = this.me;
+      if (gdt == null) gdt = dt;
       this.t += dt;
       this.setText('resDv', Math.floor(p.res.d));
       this.setText('resPv', Math.floor(p.res.p));
@@ -112,10 +124,10 @@
         this.updateTips();
         if (this.hoverSlot >= 0 && this.buttons[this.hoverSlot]) this.showTip(this.hoverSlot, this.cmd.children[this.hoverSlot]);
       }
-      this.updateDialog(dt);
+      this.updateDialog(gdt);
       // fade messages
       for (const m of [...this.msgs.children]) {
-        m._t = (m._t || 0) + dt;
+        m._t = (m._t || 0) + gdt;
         if (m._t > (m._life || 5)) m.remove();
         else if (m._t > (m._life || 5) - 1) m.style.opacity = String((m._life || 5) - m._t);
       }
@@ -279,15 +291,15 @@
       }
       for (const id of dead) h += `<div class="hero dead" title="${esc(AC.UNITS[id].name)} has fallen"><img src="${iconSrc(id, p.color)}"><span class="lv">✝</span></div>`;
       this.heroBar.innerHTML = h;
-      for (const el of this.heroBar.querySelectorAll('.hero[data-id]')) {
-        el.onclick = (e) => {
-          const id = +el.dataset.id;
-          const now = performance.now();
-          if (this._lastHeroClick === id && now - this._lastHeroT < 350) { const u = g.get(id); if (u) this.r.centerOn(u.x, u.y); }
-          this._lastHeroClick = id; this._lastHeroT = now;
-          AC.input.setSelection(e.shiftKey ? [...new Set([...AC.ui.selected, id])] : [id]);
-        };
-      }
+    }
+    onHeroClick(e) {
+      const el = e.target.closest('.hero[data-id]');
+      if (!el) return;
+      const id = +el.dataset.id;
+      const now = performance.now();
+      if (this._lastHeroClick === id && now - this._lastHeroT < 400) { const u = this.g.get(id); if (u) this.r.centerOn(u.x, u.y); }
+      this._lastHeroClick = id; this._lastHeroT = now;
+      AC.input.setSelection(e.shiftKey ? [...new Set([...AC.ui.selected, id])] : [id]);
     }
 
     // ------------------------------------------------------------ selection panel
@@ -361,7 +373,7 @@
         this.sel.innerHTML = `<div class="single"><div class="portrait site"></div><div class="info"><div class="nm">${esc(def.name)}</div><div class="sub">${own ? 'Held by ' + esc(own.name) : 'Unclaimed'} ${e.capProgress > 0 && e.capProgress < 1 ? '— ' + Math.round(e.capProgress * 100) + '%' : ''}</div><div class="lore">An imperfect copy of the Pattern. Sorcerers draw power from its break. Stand units beside it, with no enemies near, to claim it. It yields 2 Order (Amber) or Flux (Chaos) per second.</div></div></div>`;
         return;
       }
-      const sig = 'one:' + e.id + ':' + Math.round(e.hp) + ':' + Math.round(e.mana) + ':' + (e.order ? e.order.type + (e.order.stage || '') : '') + ':' + e.level + ':' + e.buffs.map((b) => b.id).join('') + ':' + (e.trainQ ? e.trainQ.map((q) => q.id + Math.round((q.t / q.time) * 30)).join('') : '') + ':' + (e.research ? Math.round((e.research.t / e.research.time) * 30) : '') + ':' + (e.progress != null ? Math.round(e.progress * 50) : '') + (e.carry || '') + (e.owner);
+      const sig = 'one:' + e.id + ':' + Math.round(e.hp) + ':' + Math.round(e.mana) + ':' + (e.order ? e.order.type + (e.order.stage || '') : '') + ':' + e.level + ':' + e.buffs.map((b) => b.id).join('') + ':' + (e.trainQ ? e.trainQ.map((q) => q.id + Math.round((q.t / q.time) * 30)).join('') : '') + ':' + (e.research ? Math.round((e.research.t / e.research.time) * 30) : '') + ':' + (e.progress != null ? Math.round(e.progress * 50) : '') + (e.carry || '') + (e.owner) + ':' + Math.floor(e.xp || 0) + ':' + Math.ceil(e.summonT || 0);
       if (sig === this.lastSelSig) return;
       this.lastSelSig = sig;
       const col = p ? p.color : AC.NEUTRAL_COLOR;
@@ -547,7 +559,7 @@
       for (let i = 0; i < 12; i++) {
         const el = this.cmd.children[i];
         const b = B[i];
-        const sig = b ? [b.icon, b.glyph, b.hk, b.name, b.disabled, b.short, b.active, Math.round((b.cd || 0) * 40), b.cnt].join('|') : 'x';
+        const sig = b ? [b.icon, b.glyph, b.hk, b.name, b.disabled, b.short, b.active, Math.round((b.cd || 0) * 40), b.cdText, b.cnt].join('|') : 'x';
         if (el._sig === sig) continue;
         el._sig = sig;
         if (!b) { el.className = 'cmd empty'; el.querySelector('.glyph').innerHTML = ''; el.querySelector('.hk').textContent = ''; el.querySelector('.cd').style.height = '0'; el.querySelector('.cnt').textContent = ''; continue; }
@@ -614,6 +626,18 @@
     destroy() {
       this.root.classList.add('hidden');
       this.hideTip();
+      this.msgs.innerHTML = '';
+      this.sel.innerHTML = '';
+      this.heroBar.innerHTML = '';
+      this.objectives.innerHTML = '';
+      $('dialog').classList.add('hidden');
+      this.dialogQ = [];
+      this.curDialog = null;
+      this.buttons = [];
+      this.cmd.innerHTML = ''; // drops the buttons' listeners, which close over this HUD
+      $('dialog').onclick = null;
+      this._tips = null;
+      this.g = null; this.r = null;
     }
   }
   AC.HUD = HUD;

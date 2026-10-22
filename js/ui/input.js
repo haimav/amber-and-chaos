@@ -16,7 +16,7 @@
     keys: {},
     attach(game, renderer, hud) {
       this.g = game; this.r = renderer; this.hud = hud;
-      ui.selected = []; ui.mode = 'normal'; ui.submenu = null; ui.groups = {}; ui.pings = []; ui.lastAlert = null; ui.hover = 0;
+      this.reset();
       if (this.bound) return;
       this.bound = true;
       const cv = document.getElementById('game');
@@ -28,14 +28,26 @@
       cv.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
       document.documentElement.addEventListener('mouseleave', () => { ui.mouse.inside = false; });
       // Safari pinch gestures
-      cv.addEventListener('gesturestart', (e) => { e.preventDefault(); this.gz = this.r.cam.zoom; });
-      cv.addEventListener('gesturechange', (e) => { e.preventDefault(); if (this.gz) this.zoomAt(ui.mouse.x, ui.mouse.y, this.gz * e.scale, true); });
+      cv.addEventListener('gesturestart', (e) => { e.preventDefault(); if (this.active()) this.gz = this.r.cam.zoom; });
+      cv.addEventListener('gesturechange', (e) => { e.preventDefault(); if (this.gz && this.active()) this.zoomAt(ui.mouse.x, ui.mouse.y, this.gz * e.scale, true); });
       window.addEventListener('keydown', (e) => this.onKey(e, true));
       window.addEventListener('keyup', (e) => this.onKey(e, false));
       window.addEventListener('blur', () => { this.keys = {}; ui.shiftHeld = false; });
       const mm = document.getElementById('minimap');
       mm.addEventListener('mousedown', (e) => this.onMini(e, true));
       mm.addEventListener('contextmenu', (e) => e.preventDefault());
+    },
+    // forget everything about the previous battle (selection, modes, half-finished drags)
+    reset() {
+      ui.selected = []; ui.submenu = null; ui.groups = {}; ui.pings = []; ui.lastAlert = null; ui.hover = 0;
+      ui.drag = null; ui.mouseWorld = null; ui.activeType = 0;
+      this.pan = null; this.miniDrag = false; this.keys = {}; this.gz = 0;
+      this.cancelMode();
+      document.body.dataset.hover = '';
+    },
+    detach() {
+      this.reset();
+      this.g = null; this.r = null; this.hud = null;
     },
     active() { return AC.state === 'playing' && this.g && !AC.paused; },
     me() { return this.g.localPlayer; },
@@ -241,9 +253,9 @@
       const pinch = e.ctrlKey;
       let zoom = pinch || mode === 'zoom' || e.altKey;
       if (mode === 'auto' && !pinch && !e.altKey) {
-        // trackpads deliver small pixel deltas (and horizontal motion); mouse wheels deliver large line steps
-        const mouseLike = e.deltaMode === 1 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY));
-        zoom = mouseLike;
+        // two-finger scrolling pans; only line-based wheels (classic mouse wheels in some browsers)
+        // zoom. Guessing from pixel deltas misreads fast trackpad flicks as wheel clicks.
+        zoom = e.deltaMode === 1;
       }
       if (zoom) {
         const f = Math.exp(-e.deltaY * (pinch ? 0.012 : 0.0015));
@@ -290,11 +302,30 @@
     },
 
     // ------------------------------------------------------------ keyboard
+    // The key to match hotkeys against. Latin layouts use the printed letter (so AZERTY works);
+    // other layouts (Hebrew, Russian, Greek…) fall back to the physical key position.
+    keyOf(e) {
+      const k = e.key || '';
+      if (k.length === 1 && k.charCodeAt(0) < 128) return k;
+      const c = e.code || '';
+      if (/^Key[A-Z]$/.test(c)) return c.charAt(3).toLowerCase();
+      if (c === 'Period') return '.';
+      if (c === 'Comma') return ',';
+      if (c === 'Backquote') return '`';
+      if (c === 'Equal') return '=';
+      if (c === 'Minus') return '-';
+      return k;
+    },
     onKey(e, down) {
-      const k = e.key;
+      const k = this.keyOf(e);
       ui.shiftHeld = e.shiftKey;
-      if (!down) { this.keys[e.code] = false; return; }
-      if (AC.state === 'playing' && (k === 'Escape' || k === 'F10')) {
+      if (!down) {
+        this.keys[e.code] = false;
+        // macOS sends no keyup for keys released while Cmd is held
+        if (e.key === 'Meta') this.keys = {};
+        return;
+      }
+      if (AC.state === 'playing' && (k === 'Escape' || k === 'F10' || k === '`' || k === 'Pause')) {
         if (AC.paused) { AC.menus.resume(); e.preventDefault(); return; }
         if (ui.mode !== 'normal') { this.cancelMode(); e.preventDefault(); return; }
         if (ui.submenu) { ui.submenu = null; this.hud.slowT = 1; e.preventDefault(); return; }
@@ -307,7 +338,7 @@
       }
       if (!this.active()) return;
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
-      this.keys[e.code] = true;
+      if (!e.metaKey) this.keys[e.code] = true;
       const code = e.code;
       // control groups
       const m = code.match(/^Digit(\d)$/);
@@ -345,11 +376,10 @@
         if (hq) this.r.centerOn(hq.x, hq.y);
         return;
       }
+      if (e.metaKey || e.ctrlKey) return; // leave browser shortcuts (including Cmd +/− page zoom) alone
       if (k === '+' || k === '=') { this.zoomAt(this.r.vw / 2, this.r.vh / 2, this.r.cam.zoom * 1.15); return; }
       if (k === '-' || k === '_') { this.zoomAt(this.r.vw / 2, this.r.vh / 2, this.r.cam.zoom / 1.15); return; }
       if (code.startsWith('Arrow')) { e.preventDefault(); return; }
-      if (k === 'F10') { e.preventDefault(); return; }
-      if (e.metaKey || e.ctrlKey) return; // leave browser shortcuts alone
       if (k.length === 1) {
         if (this.hud.pressKey(k)) e.preventDefault();
       }
@@ -363,6 +393,8 @@
     update(dt) {
       if (!this.active()) return;
       const r = this.r;
+      // the camera can move without the pointer moving (trackpad pan, minimap, hotkeys)
+      if (ui.mouse) ui.mouseWorld = r.toWorld(ui.mouse.x, ui.mouse.y);
       const sp = 900 * ((AC.settings && AC.settings.scrollSpeed) || 1) * dt / r.cam.zoom;
       let dx = 0, dy = 0;
       if (this.keys.ArrowLeft) dx -= sp;

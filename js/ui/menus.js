@@ -67,7 +67,7 @@
       if (AC.state !== 'menu') { cv.classList.add('hidden'); M._titleLoop = false; return; }
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const w = window.innerWidth, h = window.innerHeight;
-      if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+      if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const t = (now - t0) / 1000;
       const g = ctx.createRadialGradient(w * 0.35, h * 0.55, 10, w * 0.5, h * 0.5, Math.max(w, h) * 0.8);
@@ -211,7 +211,7 @@
             <tr><td>Space</td><td>Jump to the latest alert.</td></tr>
             <tr><td>. or F1 · , or F2</td><td>Next idle worker · select your whole army.</td></tr>
             <tr><td>Home / ⌫</td><td>Jump to your seat of power.</td></tr>
-            <tr><td>Esc / F10</td><td>Cancel the current order, or pause.</td></tr>
+            <tr><td>Esc · \` · F10</td><td>Cancel the current order, or pause. (In full screen, Esc leaves full screen and pauses.)</td></tr>
           </table>
         </div>
         <div class="col">
@@ -293,7 +293,7 @@
       <div class="row"><label>Sound effects <input type="range" id="vS" min="0" max="1" step="0.05"></label></div>
       <div class="row"><label>Game speed <select id="sSpeed"><option value="0.75">Slow</option><option value="1">Normal</option><option value="1.25">Fast</option><option value="1.5">Faster</option><option value="2">Fastest</option></select></label></div>
       <div class="row"><label>Scroll speed <input type="range" id="sScroll" min="0.4" max="2.5" step="0.1"></label></div>
-      <div class="row"><label>Scroll gesture <select id="sWheel"><option value="auto">Automatic (trackpad pans, mouse wheel zooms)</option><option value="pan">Always pan</option><option value="zoom">Always zoom</option></select></label></div>
+      <div class="row"><label>Scroll gesture <select id="sWheel"><option value="auto">Automatic (two-finger scroll pans; line-scrolling mouse wheels zoom)</option><option value="pan">Always pan</option><option value="zoom">Always zoom</option></select></label></div>
       <div class="row"><label class="chk"><input type="checkbox" id="sEdge"> Scroll at the screen edges</label></div>
       <div class="row"><label class="chk"><input type="checkbox" id="sBars"> Always show health bars of damaged units and heroes</label></div>
       <div class="row"><label class="chk"><input type="checkbox" id="sTips"> Show tips in skirmish</label></div>
@@ -335,6 +335,7 @@
 
   M.results = function (won, game, meta) {
     AC.state = 'results';
+    AC.paused = false;
     const sc = meta.kind === 'campaign' ? AC.SCENARIOS.find((s) => s.id === meta.id) : null;
     if (won && sc) { const d = U.storage.get('campaignDone', {}); d[sc.id] = true; U.storage.set('campaignDone', d); }
     const rows = game.players.filter((p) => !p.isNeutral).map((p) => `<tr style="color:${p.color.light}"><td>${esc(p.name)}</td><td>${p.stats.trained}</td><td>${p.stats.kills}</td><td>${p.stats.lost}</td><td>${p.stats.built}</td><td>${p.stats.razed}</td><td>${Math.floor(p.stats.gathered)}</td><td>${Math.floor(p.stats.power)}</td></tr>`).join('');

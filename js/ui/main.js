@@ -13,7 +13,16 @@
   let game = null, renderer = null, hud = null, meta = null, makeGame = null;
   let acc = 0, last = performance.now();
 
+  // tear down the current battle (HUD, renderer caches, input references)
+  function teardown() {
+    if (hud) hud.destroy();
+    if (renderer) renderer.destroy();
+    hud = null; renderer = null; game = null;
+    AC.hud = null; AC.renderer = null; AC.game = null;
+    AC.input.detach();
+  }
   AC.startGame = function (factory, m) {
+    teardown();
     AC.menus.hide();
     $('loading').classList.remove('hidden');
     // give the browser a frame to show the loading veil
@@ -58,9 +67,7 @@
   AC.quitToTitle = function () {
     AC.state = 'menu';
     AC.paused = false;
-    game = null; AC.game = null;
-    if (hud) hud.destroy();
-    hud = null; renderer = null;
+    teardown();
     const ctx = $('game').getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, $('game').width, $('game').height);
@@ -102,15 +109,43 @@
     }
     if (AC.state === 'playing') AC.input.update(dt);
     renderer.render(Math.min(1, acc / AC.TICK), AC.paused ? 0 : dt);
-    if (hud) hud.update(dt);
+    if (hud) hud.update(dt, AC.paused ? 0 : dt);
   }
 
-  window.addEventListener('resize', () => {
+  function onResize() {
     if (renderer) renderer.resize();
     if (hud) hud.resizeMinimap();
+  }
+  window.addEventListener('resize', onResize);
+  // moving the window between a Retina and an external display changes the pixel density
+  // without necessarily firing 'resize'
+  (function watchDensity() {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia('(resolution: ' + (window.devicePixelRatio || 1) + 'dppx)');
+    const on = () => { onResize(); watchDensity(); };
+    if (mq.addEventListener) mq.addEventListener('change', on, { once: true });
+    else if (mq.addListener) mq.addListener(function h() { mq.removeListener(h); on(); });
+  })();
+  // keep the window from scrolling or zooming as a page: pinch (Safari gestures, Chrome ctrl+wheel)
+  // anywhere, and wheel/swipe over the HUD during play (which would otherwise risk Back navigation)
+  window.addEventListener('wheel', (e) => {
+    if (e.ctrlKey) { e.preventDefault(); return; }
+    if (AC.state === 'playing' && !AC.paused && e.target && e.target.id !== 'game') {
+      e.preventDefault();
+      AC.input.onWheel(e, true);
+    }
+  }, { passive: false });
+  for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
+  window.addEventListener('beforeunload', (e) => {
+    if (AC.state === 'playing' && game && !game.over) { e.preventDefault(); e.returnValue = ''; return ''; }
   });
-  // keep the window from scrolling or zooming as a page
-  window.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+  // Esc leaves fullscreen without reaching the page: treat leaving fullscreen during play as a pause
+  const onFs = () => {
+    const fs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!fs && AC.state === 'playing' && !AC.paused && game && !game.over) AC.menus.pause();
+  };
+  document.addEventListener('fullscreenchange', onFs);
+  document.addEventListener('webkitfullscreenchange', onFs);
   document.addEventListener('visibilitychange', () => { if (document.hidden && AC.state === 'playing' && !AC.paused && game && !game.over) AC.menus.pause(); });
 
   window.addEventListener('DOMContentLoaded', () => {

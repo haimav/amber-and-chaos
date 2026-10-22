@@ -17,7 +17,7 @@
       this.theme = null;
     }
     init() {
-      if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+      if (this.ctx) { if (this.ctx.state !== 'running' && this.ctx.resume) this.ctx.resume().catch(() => {}); return; }
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return;
       this.ctx = new Ctx();
