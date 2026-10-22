@@ -699,8 +699,8 @@
       if (target.mods) a *= target.mods.dmgTaken;
       // riposte reflects melee
       if (src && src.kind === 'unit' && target.mods && target.mods.riposte && opts.melee) {
-        a *= 0.25;
-        if (!opts.reflected) this.damage(target, src, amount * 0.5, 'normal', { reflected: true });
+        a *= 0.4;
+        if (!opts.reflected) this.damage(target, src, amount * 0.4, 'normal', { reflected: true });
         this.fx('spark', { x: target.x, y: target.y - 8, color: '#ffd0d0' });
       }
       a = Math.max(type === 'true' ? 0 : 0.5, a);

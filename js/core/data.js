@@ -257,7 +257,7 @@
     },
     julian: {
       name: 'Julian', title: 'Lord of Arden', faction: 'amber', hero: true, role: 'hero',
-      hp: 1100, armor: 3, armorType: 'hero', dmg: 34, dmgType: 'hero', range: 28, cd: 1.0,
+      hp: 1220, armor: 3, armorType: 'hero', dmg: 37, dmgType: 'hero', range: 28, cd: 1.0,
       speed: 112, sight: 12, radius: 15, mana: 200, manaRegen: 1.3,
       cost: { d: 300, p: 100 }, supply: 4, time: 40, colors: ['#f0f0f0', '#1a1a1a'], move: 'woods',
       abilities: ['hounds', 'the_hunt', 'trump_recall', 'jewel_storm'],
@@ -267,7 +267,7 @@
     },
     fiona: {
       name: 'Fiona', title: 'Sorceress of Amber', faction: 'amber', hero: true, role: 'hero',
-      hp: 850, armor: 1, armorType: 'hero', dmg: 30, dmgType: 'magic', range: 170, cd: 1.2,
+      hp: 980, armor: 2, armorType: 'hero', dmg: 33, dmgType: 'hero', range: 170, cd: 1.2,
       speed: 92, sight: 12, radius: 12, mana: 260, manaRegen: 2.0, canHitAir: true, projectile: 'magic',
       cost: { d: 300, p: 120 }, supply: 4, time: 40, colors: ['#d23c2a', '#5a1a40'],
       abilities: ['psychic_bind', 'sorcery_fire', 'trump_recall', 'jewel_storm'],
@@ -277,7 +277,7 @@
     },
     caine: {
       name: 'Caine', title: 'Admiral of Amber', faction: 'amber', hero: true, role: 'hero',
-      hp: 950, armor: 2, armorType: 'hero', dmg: 34, dmgType: 'pierce', range: 210, cd: 1.15,
+      hp: 1080, armor: 2, armorType: 'hero', dmg: 38, dmgType: 'hero', range: 210, cd: 1.1,
       speed: 96, sight: 13, radius: 12, mana: 180, manaRegen: 1.2, canHitAir: true, projectile: 'silver',
       cost: { d: 300, p: 100 }, supply: 4, time: 40, colors: ['#1a1a1a', '#2f8a4a'],
       abilities: ['silver_arrow', 'feigned_death', 'trump_recall', 'jewel_storm'],
@@ -287,7 +287,7 @@
     },
     random: {
       name: 'Random', title: 'The King to Be', faction: 'amber', hero: true, role: 'hero',
-      hp: 1050, armor: 3, armorType: 'hero', dmg: 33, dmgType: 'hero', range: 24, cd: 0.95,
+      hp: 1150, armor: 3, armorType: 'hero', dmg: 35, dmgType: 'hero', range: 24, cd: 0.95,
       speed: 100, sight: 11, radius: 13, mana: 200, manaRegen: 1.4,
       cost: { d: 300, p: 100 }, supply: 4, time: 40, colors: ['#e0601c', '#7a3a18'],
       abilities: ['war_drums', 'trump_summons', 'trump_recall', 'jewel_storm'],
@@ -298,8 +298,8 @@
 
     dara: {
       name: 'Dara', title: 'Daughter of the Hellmaid', faction: 'chaos', hero: true, role: 'hero',
-      hp: 1100, armor: 3, armorType: 'hero', dmg: 37, dmgType: 'hero', range: 24, cd: 0.95,
-      speed: 100, sight: 11, radius: 13, mana: 200, manaRegen: 1.4, regen: 1.5,
+      hp: 1050, armor: 3, armorType: 'hero', dmg: 35, dmgType: 'hero', range: 24, cd: 1.0,
+      speed: 100, sight: 11, radius: 13, mana: 200, manaRegen: 1.4, regen: 1.0,
       cost: { d: 300, p: 100 }, supply: 4, time: 40, colors: ['#3a1050', '#c8b8d8'],
       abilities: ['chaos_shape', 'borel_lunge', 'ways_recall', 'chaos_wave'],
       passive: { name: 'Blood of Two Worlds', desc: 'Descended from Benedict and Lintra. She regenerates.' },
@@ -308,7 +308,7 @@
     },
     brand: {
       name: 'Brand', title: 'The Living Trump', faction: 'chaos', hero: true, role: 'hero',
-      hp: 950, armor: 1, armorType: 'hero', dmg: 36, dmgType: 'magic', range: 180, cd: 1.2,
+      hp: 1150, armor: 2, armorType: 'hero', dmg: 42, dmgType: 'hero', range: 180, cd: 1.2,
       speed: 94, sight: 12, radius: 12, mana: 260, manaRegen: 2.0, canHitAir: true, projectile: 'fire',
       cost: { d: 300, p: 120 }, supply: 4, time: 40, colors: ['#2fa84a', '#163a1e'],
       abilities: ['living_trump', 'pyrokinesis', 'ways_recall', 'chaos_wave'],
@@ -322,14 +322,14 @@
       speed: 90, sight: 11, radius: 14, mana: 180, manaRegen: 1.1,
       cost: { d: 320, p: 110 }, supply: 4, time: 40, colors: ['#8a1a1a', '#202020'],
       abilities: ['riposte', 'call_hendrake', 'ways_recall', 'chaos_wave'],
-      aura: { kind: 'armor', amount: 3, radius: 6 },
-      passive: { name: 'Master at Arms of the Courts', desc: 'Aura: allies within 6 tiles gain +3 armour.' },
+      aura: { kind: 'armor', amount: 2, radius: 6 },
+      passive: { name: 'Master at Arms of the Courts', desc: 'Aura: allies within 6 tiles gain +2 armour.' },
       art: 'hero_borel',
       desc: "Duke and Master at Arms of House Hendrake, and Dara's fencing master. The finest blade of the Courts.",
     },
     mandor: {
       name: 'Mandor', title: 'Lord of House Sawall', faction: 'chaos', hero: true, role: 'hero',
-      hp: 950, armor: 2, armorType: 'hero', dmg: 32, dmgType: 'magic', range: 170, cd: 1.2,
+      hp: 1120, armor: 2, armorType: 'hero', dmg: 39, dmgType: 'hero', range: 170, cd: 1.2,
       speed: 92, sight: 12, radius: 12, mana: 240, manaRegen: 1.8, canHitAir: true, projectile: 'sphere',
       cost: { d: 300, p: 120 }, supply: 4, time: 40, colors: ['#151515', '#b0b0b8'],
       abilities: ['spheres', 'machinations', 'ways_recall', 'chaos_wave'],
@@ -349,7 +349,7 @@
     },
     suhuy: {
       name: 'Suhuy', title: 'Keeper of the Logrus', faction: 'chaos', hero: true, role: 'hero',
-      hp: 900, armor: 1, armorType: 'hero', dmg: 28, dmgType: 'magic', range: 170, cd: 1.3,
+      hp: 1020, armor: 2, armorType: 'hero', dmg: 31, dmgType: 'hero', range: 170, cd: 1.3,
       speed: 88, sight: 12, radius: 12, mana: 280, manaRegen: 2.2, canHitAir: true, projectile: 'tendril',
       cost: { d: 300, p: 120 }, supply: 4, time: 40, colors: ['#3b1a6a', '#d0c060'],
       abilities: ['tendrils', 'logrus_mend', 'ways_recall', 'chaos_wave'],
@@ -588,8 +588,8 @@
     },
 
     chaos_shape: {
-      name: 'Shape of Chaos', key: 'Q', mana: 75, cd: 40, target: 'none', dur: 15, icon: '❖', color: '#c040ff', ai: 'engage',
-      desc: 'Dara takes her true shape for 15 seconds: +60% damage, +3 armour, and fast regeneration.',
+      name: 'Shape of Chaos', key: 'Q', mana: 75, cd: 40, target: 'none', dur: 12, icon: '❖', color: '#c040ff', ai: 'engage',
+      desc: 'Dara takes her true shape for 12 seconds: +40% damage, +2 armour, and fast regeneration.',
     },
     borel_lunge: {
       name: "Borel's Lunge", key: 'W', mana: 45, cd: 10, target: 'unit', range: 5 * T, dmg: 140, icon: '➹', color: '#ffa0d0', ai: 'target',
@@ -600,20 +600,20 @@
       desc: 'Brand wills himself elsewhere and teleports up to 14 tiles.',
     },
     pyrokinesis: {
-      name: 'Pyrokinesis', key: 'W', mana: 85, cd: 18, target: 'point', range: 8 * T, radius: 2.5 * T, dur: 6, dps: 35, icon: '🔥', color: '#ff7a20', ai: 'aoePoint',
-      desc: 'Sets the ground alight for 6 seconds, dealing 35 damage per second to enemies in it.',
+      name: 'Pyrokinesis', key: 'W', mana: 85, cd: 16, target: 'point', range: 8 * T, radius: 2.5 * T, dur: 6, dps: 48, icon: '🔥', color: '#ff7a20', ai: 'aoePoint',
+      desc: 'Sets the ground alight for 6 seconds, dealing 48 damage per second to enemies in it.',
     },
     riposte: {
       name: 'Riposte', key: 'Q', mana: 50, cd: 22, target: 'none', dur: 6, icon: '⚔', color: '#ff5050', ai: 'buff',
-      desc: 'For 6 seconds Borel parries 75% of melee damage and returns half of it to the attacker.',
+      desc: 'For 6 seconds Borel parries 60% of melee damage and returns 40% of it to the attacker.',
     },
     call_hendrake: {
       name: 'Call of Hendrake', key: 'W', mana: 90, cd: 50, target: 'none', dur: 40, icon: '♜', color: '#c03030', ai: 'summon',
       desc: 'Two warriors of House Hendrake answer for 40 seconds.',
     },
     spheres: {
-      name: 'Spheres of Sawall', key: 'Q', mana: 70, cd: 12, target: 'unit', range: 8 * T, dmg: 100, icon: '●', color: '#c0c0d0', ai: 'target',
-      desc: 'A sorcerous sphere that leaps between up to 4 enemies, dealing 100 damage to each.',
+      name: 'Spheres of Sawall', key: 'Q', mana: 65, cd: 10, target: 'unit', range: 8 * T, dmg: 125, icon: '●', color: '#c0c0d0', ai: 'target',
+      desc: 'A sorcerous sphere that leaps between up to 4 enemies, dealing 125 damage to each.',
     },
     machinations: {
       name: 'Machinations', key: 'W', mana: 70, cd: 30, target: 'none', radius: 8 * T, dur: 8, icon: '☍', color: '#9090a0', ai: 'aoe',
@@ -621,11 +621,11 @@
     },
     logrus_blink: {
       name: 'Logrus Step', key: 'Q', mana: 40, cd: 8, target: 'point', range: 7 * T, icon: '↯', color: '#c080ff', ai: 'blink',
-      desc: 'Jurt steps through the Logrus up to 7 tiles away. His next attack deals double damage.',
+      desc: 'Jurt steps through the Logrus up to 7 tiles away. His next attack deals 60% more damage.',
     },
     fury: {
       name: 'Fury', key: 'W', mana: 60, cd: 25, target: 'none', dur: 10, icon: '✸', color: '#ff3030', ai: 'engage',
-      desc: 'For 10 seconds Jurt attacks 50% faster and heals for 25% of the damage he deals.',
+      desc: 'For 10 seconds Jurt attacks 40% faster and heals for 20% of the damage he deals.',
     },
     tendrils: {
       name: 'Logrus Tendrils', key: 'Q', mana: 70, cd: 16, target: 'point', range: 9 * T, radius: 3 * T, dmg: 50, dur: 3, icon: '❦', color: '#b060ff', ai: 'aoePoint',

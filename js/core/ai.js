@@ -65,7 +65,7 @@
       if (this.t < this.next) return;
       this.next = this.t + this.d.think;
       if (!this.p.alive || this.g.over) return;
-      if (this.opts.passive) { this.micro(); return; }
+      if (this.opts.passive) { this.scan(); this.micro(); return; }
       this.scan();
       if (!this.opts.noEconomy) {
         this.economy();
@@ -590,6 +590,7 @@
     }
     decide(h, ab, enemies, hpF) {
       const g = this.g;
+      if (!this.mainHq) this.mainHq = g.hq(this.pid);
       const A = AC.Abilities;
       const near = (r) => enemies.filter((u) => Math.hypot(u.x - h.x, u.y - h.y) < r);
       switch (ab.ai) {
@@ -611,7 +612,7 @@
           let best = null, bn = 0;
           for (const u of inR) {
             let n = 0;
-            for (const v of inR) if (Math.hypot(v.x - u.x, v.y - u.y) < ab.radius) n += v.def.hero ? 2 : 1;
+            for (const v of inR) if (Math.hypot(v.x - u.x, v.y - u.y) < ab.radius) n += v.def.hero ? 3 : 1;
             if (n > bn) { bn = n; best = u; }
           }
           if (best && bn >= 3) return { x: best.x, y: best.y };

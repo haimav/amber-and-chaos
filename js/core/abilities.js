@@ -71,8 +71,8 @@
           case 'hunted': m.dmgTaken *= 1.5; break;
           case 'holdLine': m.dmgTaken *= 0.5; break;
           case 'riposte': m.riposte = true; break;
-          case 'fury': m.atkSpeed *= 1.5; m.lifesteal += 0.25; break;
-          case 'chaosShape': m.dmg *= 1.6; m.armor += 3; m.regen += 14; break;
+          case 'fury': m.atkSpeed *= 1.4; m.lifesteal += 0.2; break;
+          case 'chaosShape': m.dmg *= 1.4; m.armor += 2; m.regen += 9; break;
           case 'drum': m.speed *= 1.8; m.dmg *= 1.3; break;
           case 'feign': m.speed *= 1.3; break;
           case 'weaken': m.dmgTaken *= 1.0; m.dmg *= 0.7; break;
@@ -419,7 +419,7 @@
         g.sfx('whisper', e.x, e.y);
         break;
       case 'logrus_blink':
-        if (teleport(g, e, o.x, o.y, '#c080ff')) e.nextHitBonus = 2;
+        if (teleport(g, e, o.x, o.y, '#c080ff')) e.nextHitBonus = 1.6;
         break;
       case 'fury':
         A.addBuff(g, e, { id: 'fury', t: ab.dur });

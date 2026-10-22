@@ -58,13 +58,15 @@
         b.className = 'cmd empty';
         b.dataset.slot = i;
         b.innerHTML = '<span class="glyph"></span><span class="hk"></span><span class="cd"></span><span class="cnt"></span>';
-        b.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+        b.tabIndex = -1;
+        b.addEventListener('mousedown', (e) => { e.stopPropagation(); e.preventDefault(); }); // keep keyboard focus off HUD buttons
         b.addEventListener('click', (e) => { e.stopPropagation(); this.press(i, e.shiftKey); });
         b.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); this.pressRight(i); });
         b.addEventListener('mouseenter', () => { this.hoverSlot = i; this.showTip(i, b); });
         b.addEventListener('mouseleave', () => { this.hoverSlot = -1; this.hideTip(); });
         this.cmd.appendChild(b);
       }
+      for (const id of ['menuBtn', 'idleBtn', 'fsBtn']) { $(id).tabIndex = -1; $(id).onmousedown = (e) => e.preventDefault(); }
       $('menuBtn').onclick = () => AC.menus.pause();
       $('idleBtn').onclick = () => AC.input.selectIdleWorker();
       this.resizeMinimap();
