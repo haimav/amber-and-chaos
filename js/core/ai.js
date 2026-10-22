@@ -84,6 +84,7 @@
       this.my = g.units.filter((u) => !u.dead && u.owner === pid);
       this.workers = this.my.filter((u) => u.def.role === 'worker');
       this.army = this.my.filter((u) => u.def.role !== 'worker' && !u.def.summon && !u.garrison);
+      this.garrison = this.my.filter((u) => u.garrison && !(u.order && u.order.type === 'hold'));
       this.heroList = this.my.filter((u) => u.def.hero);
       this.blds = g.buildings.filter((b) => !b.dead && b.owner === pid);
       this.hqs = this.blds.filter((b) => b.def.dropoff);
@@ -170,8 +171,12 @@
       // no place left to bring diamonds: raise a new seat before anything else
       if (!this.hqs.length && this.workers.length) {
         if (pending[p.F.hq] || pending[p.F.expansion]) return;
-        const id = g.canBuildType(p.F.hq) ? p.F.hq : p.F.expansion;
-        if (!g.canBuildType(id) || !g.meetsReq(this.pid, AC.BUILDINGS[id])) return;
+        const seats = [p.F.hq, p.F.expansion].filter((id) => g.canBuildType(id) && g.meetsReq(this.pid, AC.BUILDINGS[id]));
+        if (!seats.length) return;
+        // with no dropoff there is no income to wait for: take the first seat we can pay for now,
+        // otherwise save for the cheapest
+        const id = seats.find((k) => g.canAfford(p, AC.BUILDINGS[k].cost)) ||
+          seats.reduce((a, b) => (AC.BUILDINGS[b].cost.d < AC.BUILDINGS[a].cost.d ? b : a));
         if (!this.tryBuild(id)) this.reserve = AC.BUILDINGS[id].cost;
         return;
       }
@@ -323,7 +328,41 @@
       }
       let runs = 0;
       for (let i = 0; i < open.length; i++) if (open[i] && !open[(i + open.length - 1) % open.length]) runs++;
-      return runs === 1 || (runs === 0 && open[0]);
+      if (runs === 1 || (runs === 0 && open[0])) return true;
+      if (runs === 0) return false;
+      // several open stretches: a plug only if they do not join up again just outside
+      return this.onePiece(tx, ty, s);
+    }
+    // the open ground round a footprint, searched a few tiles out (but not through it), is one
+    // piece; dead-end pockets that lead nowhere do not count, unless they are large or hold
+    // diamonds that would be walled off
+    onePiece(tx, ty, s) {
+      const m = this.g.map, R = 5;
+      const inF = (x, y) => x >= tx && x < tx + s && y >= ty && y < ty + s;
+      const pass = (j) => (AC.PASS[m.terrain[j]] & 1) !== 0;
+      const seen = new Set();
+      let pieces = 0;
+      for (let y = ty - 1; y <= ty + s; y++)
+        for (let x = tx - 1; x <= tx + s; x++) {
+          const i0 = y * m.w + x;
+          if (inF(x, y) || !m.inb(x, y) || seen.has(i0) || !pass(i0)) continue;
+          let n = 0, out = false, res = false;
+          const q = [i0];
+          seen.add(i0);
+          while (q.length) {
+            const i = q.pop(), cx = i % m.w, cy = (i / m.w) | 0;
+            n++;
+            if (m.occ[i]) { const e = this.g.get(m.occ[i]); if (e && e.kind === 'resource') res = true; }
+            for (let k = 0; k < 4; k++) {
+              const nx = cx + (k === 0 ? 1 : k === 1 ? -1 : 0), ny = cy + (k === 2 ? 1 : k === 3 ? -1 : 0), j = ny * m.w + nx;
+              if (!m.inb(nx, ny) || inF(nx, ny) || seen.has(j) || !pass(j)) continue;
+              if (nx < tx - R || nx >= tx + s + R || ny < ty - R || ny >= ty + s + R) { out = true; continue; }
+              seen.add(j); q.push(j);
+            }
+          }
+          if (out || res || n >= 30) pieces++;
+        }
+      return pieces === 1;
     }
     findExpansion(id) {
       const g = this.g;
@@ -504,13 +543,23 @@
           this.lastDefendCmd = g.time;
           this.cmd({ type: 'attackMove', ids: near.map((u) => u.id), x: threat.x, y: threat.y });
         }
+        // a stronghold's garrison never joins the waves, but it does answer an attack on the base
+        const guards = this.garrison.filter((u) => !u.order || u.order.type !== 'attack' || u.order.auto);
+        if (guards.length && g.time - (this.lastGuardCmd || 0) > 2) {
+          this.lastGuardCmd = g.time;
+          this.cmd({ type: 'attackMove', ids: guards.map((u) => u.id), x: threat.x, y: threat.y });
+        }
         // workers fight back against small raids if no army
-        if (!fighters.length && threat.n <= 3) {
+        if (!fighters.length && !this.garrison.length && threat.n <= 3) {
           const ws = this.workers.filter((w) => U.dist2(w.x, w.y, threat.x, threat.y) < (8 * T) ** 2).slice(0, 6);
           if (ws.length) this.cmd({ type: 'attackMove', ids: ws.map((w) => w.id), x: threat.x, y: threat.y });
           this.workerDefense = true;
         }
         return;
+      }
+      // the garrison walks back to its posts once the attack is over
+      for (const u of this.garrison) {
+        if ((!u.order || u.order.type === 'attackMove') && Math.hypot(u.x - u.homeX, u.y - u.homeY) > 3 * T) AC.issue(g, u, { type: 'move', x: u.homeX, y: u.homeY }, false);
       }
       if (this.workerDefense) {
         this.workerDefense = false;
@@ -530,7 +579,11 @@
           }
         }
         if (g.time - (this.lastRegroup || 0) > 10) { this.lastRegroup = g.time; this.regroup(fighters, true); }
-        if (g.time >= this.nextWaveT && this.armySupply >= this.waveSize) {
+        // the wave sets out at its planned size, or at the largest army the supply cap still
+        // allows beside the workers and a stronghold's garrison
+        const held = this.my.reduce((a, u) => a + (u.def.role === 'worker' || u.garrison ? u.def.supply || 0 : 0), 0);
+        const room = AC.MAX_SUPPLY - held - (this.heroRoom || 0);
+        if (g.time >= this.nextWaveT && this.armySupply >= Math.min(this.waveSize, room - 4)) {
           this.state = 'attack';
           this.waveN++;
           this.waveStart = this.armySupply;
@@ -603,6 +656,8 @@
       for (const h of casters) {
         const casting = h.channel || (h.order && h.order.type === 'cast');
         const hpF = h.hp / h.maxHp;
+        // healed on the way home: rejoin the army
+        if (h.order && h.order.retreat && hpF > 0.5) h.order.retreat = false;
         // a nearly dead hero walks home, abandoning an approach to a cast; one already
         // channelling (or recalling) is left to finish
         if (h.def.hero && hpF < 0.22 && this.mainHq && !h.channel && !(casting && AC.ABILITIES[h.order.ab] && AC.ABILITIES[h.order.ab].ai === 'retreat')) {

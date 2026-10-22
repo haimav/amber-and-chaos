@@ -98,6 +98,8 @@
     for (const u of us) { u.garrison = true; u.homeX = u.x; u.homeY = u.y; }
     return us;
   };
+  // the enemy's income for the chosen difficulty (Hard leaves it at the computer's own rate)
+  S.enemyIncome = (opts, normal) => (opts.difficulty === 'hard' ? 1 : opts.difficulty === 'easy' ? 0.7 : normal);
   S.say = function (g, who, text, portrait, color, life) { g.emit({ type: 'dialog', who, text, portrait, color: color || 0, life }); };
   S.obj = function (g, id, text, opts) {
     const o = Object.assign({ id, text, done: false, failed: false }, opts || {});
@@ -372,7 +374,7 @@
       const siege = S.spawn(g, 1, [['manticore', 2], ['wyvern', 2], ['demon', 6], ['crossbow', 4]], 40 * T, 49 * T);
       for (const u of siege) { u.order = { type: 'attackMove', x: 31 * T, y: 48 * T }; u.homeX = 33 * T; u.homeY = 48 * T; }
       for (const [x, y] of [[34, 22], [64, 80]]) S.spawn(g, 2, [['wild_manticore', 1]], x * T, y * T).forEach((u) => { u.homeX = u.x; u.homeY = u.y; });
-      const ai = new AC.AI(g, 1, { firstWave: opts.difficulty === 'hard' ? 300 : 400, noCreep: true });
+      const ai = new AC.AI(g, 1, { firstWave: opts.difficulty === 'hard' ? 300 : 400, noCreep: true, gatherMult: S.enemyIncome(opts, 0.8) });
       ai.rally = { x: 70 * T, y: 50 * T };
       castle.maxHp = castle.hp = 5200; // the heart of Amber is not easily breached
       g.get(g.buildings.find((b) => b.def.id === 'spire' && b.owner === 1).id).maxHp = 4800;
@@ -523,7 +525,7 @@
       g.setMap(m);
       g.mapName = 'The Courts of Chaos';
       g.addPlayer({ name: 'The Host of Amber', faction: 'amber', color: AC.PLAYER_COLORS[0], startD: 700, startP: 300 });
-      g.addPlayer({ name: 'The Courts of Chaos', faction: 'chaos', color: AC.PLAYER_COLORS[1], team: 1, isAI: true, difficulty: opts.difficulty === 'easy' ? 'normal' : 'hard', startD: 700, startP: 300 });
+      g.addPlayer({ name: 'The Courts of Chaos', faction: 'chaos', color: AC.PLAYER_COLORS[1], team: 1, isAI: true, difficulty: opts.difficulty === 'hard' ? 'hard' : 'normal', startD: 700, startP: 300 });
       g.addPlayer({ name: 'Wild things of Shadow', isNeutral: true, faction: 'neutral', team: -99, color: AC.NEUTRAL_COLOR });
       g.localPlayer = 0;
       g.spawnBuilding('ygg', 2, 39, 62, true);
@@ -561,7 +563,7 @@
       S.garrison(S.spawn(g, 1, [['demon', k(9)], ['crossbow', k(7)], ['hellmaid', k(3)], ['manticore', k(2)], ['wyvern', k(2)], ['spitter', k(1)]], 72 * T, 56 * T));
       S.garrison(S.spawn(g, 1, [['demon', k(4)], ['crossbow', k(3)], ['manticore', 1]], 84 * T, 50 * T));
       spire.maxHp = spire.hp = 5000;
-      const ai = new AC.AI(g, 1, { firstWave: 300, noCreep: true });
+      const ai = new AC.AI(g, 1, { firstWave: 300, noCreep: true, gatherMult: S.enemyIncome(opts, 1) });
       ai.rally = { x: 70 * T, y: 56 * T };
       g.ais.push(ai);
       const sc = (g.scenario = { id: 'patternfall', customVictoryOnly: true, spireId: spire.id, brandId: brand.id, nextStorm: 230 });
@@ -673,7 +675,7 @@
       S.garrison(S.spawn(g, 1, [['guard', 6], ['ranger', 4]], 24 * T, 48 * T));
       const pattern = g.spawnSite(17, 48, 'The Pattern');
       pattern.noCapture = true; pattern.isPattern = true;
-      const ai = new AC.AI(g, 1, { firstWave: 420, noCreep: true, noExpand: true });
+      const ai = new AC.AI(g, 1, { firstWave: 420, noCreep: true, noExpand: true, gatherMult: S.enemyIncome(opts, 0.8) });
       g.ais.push(ai);
       for (const [x, y] of [[60, 20], [30, 76]]) S.spawn(g, 2, [['shadow_wolf', 3]], x * T, y * T).forEach((u) => { u.homeX = u.x; u.homeY = u.y; });
       const sc = (g.scenario = { id: 'dara', customVictoryOnly: true, lodgeId: lodge.id, daraHero: 'dara', patternId: pattern.id, walk: 0, phase: 1 });

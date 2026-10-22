@@ -39,7 +39,7 @@
     for (let i = 0; i < list.length; i++) {
       const t = list[i];
       if (t === e || t.dead || !g.areEnemies(e.owner, t.owner)) continue;
-      if (t.id === e.unreach && g.time < e.unreachT) continue;
+      if (e.unreach && e.unreach[t.id] > g.time && B.gap(g, e, t) > B.range(e)) continue;
       // leave peaceful wild creatures alone unless they are fighting us (or we hunt them)
       if (!neutralSeeker && g.players[t.owner].isNeutral && !(opts && opts.creeps) && !(t.order && t.order.type === 'attack')) continue;
       const d2 = U.dist2(t.x, t.y, e.x, e.y);
@@ -57,7 +57,7 @@
       for (let i = 0; i < bl.length; i++) {
         const t = bl[i];
         if (t.dead || !g.areEnemies(e.owner, t.owner)) continue;
-        if (t.id === e.unreach && g.time < e.unreachT) continue;
+        if (e.unreach && e.unreach[t.id] > g.time && B.gap(g, e, t) > B.range(e)) continue;
         const d = g.edgeDist(t, e.x, e.y);
         if (d > r) continue;
         if (!B.canTarget(g, e, t)) continue;
@@ -171,6 +171,21 @@
   }
   B.nextOrder = nextOrder;
 
+  // Orders that never finish on their own (gathering, patrol, hold, follow) give way to real
+  // orders queued behind them, and are taken up again once those are done.
+  const ENDLESS = { gather: 1, patrol: 1, hold: 1, follow: 1 };
+  function yieldEndless(g, e) {
+    const o = e.order;
+    if (!o || !ENDLESS[o.type]) return;
+    if (!e.queue.some((q) => !ENDLESS[q.type])) {
+      // only returns-to-gathering left behind an order that never ends: they can never run
+      if (e.queue.every((q) => q.resumed)) e.queue.length = 0;
+      return;
+    }
+    if (!ENDLESS[e.queue[e.queue.length - 1].type]) e.queue.push(o.type === 'gather' ? { type: 'gather', target: o.target, resumed: true } : o);
+    nextOrder(g, e);
+  }
+
   // ------------------------------------------------------------------ combat
   function doAttack(g, e, t) {
     const def = e.def;
@@ -248,17 +263,24 @@
   B.engage = engage;
 
   // A chase that has not closed in for 4 seconds is given up, and the target ignored for a
-  // while. Orders the unit picked for itself give up on anything (a faster foe, a press of
-  // bodies); a direct order only on a target standing where the unit cannot go (a ranger
-  // deep in a forest, a sniper on a cliff).
+  // while unless it comes within reach. Orders the unit picked for itself give up on anything
+  // (a faster foe, a press of bodies); a direct order only on a target standing where the unit
+  // cannot go (a ranger deep in a forest, a sniper on a cliff).
   function chaseStalled(g, e, t, strict) {
     const gap = B.gap(g, e, t);
-    const c = e.chase || (e.chase = { id: 0, best: 0, t: 0 });
-    if (c.id !== t.id || gap <= B.range(e) || gap < c.best - 6) { c.id = t.id; c.best = gap; c.t = g.time; return false; }
+    const c = e.chase || (e.chase = { id: 0, best: 0, t: 0, seen: 0 });
+    const fresh = g.time - c.seen > 0.5; // a record left from an earlier, broken-off chase
+    c.seen = g.time;
+    if (c.id !== t.id || fresh || gap <= B.range(e) || gap < c.best - 6) { c.id = t.id; c.best = gap; c.t = g.time; return false; }
     if (g.time - c.t < 4) return false;
     if (strict && (t.kind !== 'unit' || t.def.air || e.def.air || g.map.passableWorld(t.x, t.y, g.moveBits(e)))) return false;
     c.id = 0;
-    e.unreach = t.id; e.unreachT = g.time + 10;
+    // remember every foe given up on, and extend the ones still ignored, so a unit among several
+    // unreachable foes gives up on all of them and carries on with its order
+    const u = e.unreach || (e.unreach = {});
+    const until = g.time + 10;
+    for (const k in u) { if (u[k] <= g.time) delete u[k]; else u[k] = until; }
+    u[t.id] = until;
     return true;
   }
   B.chaseStalled = chaseStalled;
@@ -286,6 +308,7 @@
     const owner = g.players[e.owner];
     if (owner && owner.isNeutral) return creep(g, e, dt);
 
+    if (e.queue.length) yieldEndless(g, e);
     const o = e.order;
     if (!o) return idle(g, e, dt);
     switch (o.type) {
@@ -462,7 +485,7 @@
     let best = null, bs = 1e18;
     const own = e.order && e.order.type === 'gather' ? e.order.target : 0;
     for (const r of g.resources) {
-      if (r.dead || r.amount <= 0 || r.id === exclude) continue;
+      if (r.dead || r.amount <= 0 || (exclude && exclude[r.id] > g.time)) continue;
       const d = Math.hypot(r.x - x, r.y - y);
       if (d > maxD) continue;
       let s = d;
@@ -495,10 +518,10 @@
       if (e.carry >= e.def.carry) { o.stage = 'ret'; return; }
       // approach from the side of the dropoff; if that side is walled off, try the others in turn
       const dp = g.nearestDropoff(e.owner, r.x, r.y);
-      const a = (dp ? Math.atan2(dp.y - r.y, dp.x - r.x) : 0) + (o.side || 0) * (Math.PI / 2);
+      const k = o.side || 0, a = (dp ? Math.atan2(dp.y - r.y, dp.x - r.x) : 0) + (k & 1 ? -1 : 1) * Math.ceil(k / 2) * (Math.PI / 4);
       const ax = r.x + Math.cos(a) * 24, ay = r.y + Math.sin(a) * 24;
       const dd = Math.hypot(r.x - e.x, r.y - e.y);
-      const reach = e.radius + 38; // includes standing on a diagonal neighbour tile
+      const reach = e.radius + 44; // includes standing in a diagonal neighbour tile hemmed in by rock
       if (dd <= reach) {
         if (r.miner && r.miner !== e.id) {
           const m = g.get(r.miner);
@@ -510,25 +533,27 @@
           o.waitT = (o.waitT || 0) - dt;
           if (o.waitT <= 0) {
             o.waitT = 0.4 + Math.random() * 0.3;
-            const alt = B.findResource(g, e, r.x, r.y, 6 * T, true);
+            const alt = B.findResource(g, e, r.x, r.y, 6 * T, true, o.avoid);
             if (alt && alt !== r) { r.claims = Math.max(0, (r.claims || 1) - 1); alt.claims = (alt.claims || 0) + 1; o.target = alt.id; o.side = 0; e.path = null; }
           }
           return;
         }
         r.miner = e.id;
         o.stage = 'mine';
-        o.side = 0; o.avoid = 0;
+        o.side = 0;
         o.t = e.def.mineTime;
         stopMoving(e);
         e.angle = Math.atan2(r.y - e.y, r.x - e.x);
       } else {
         if (moveToward(g, e, ax, ay, 6, dt) && Math.hypot(r.x - e.x, r.y - e.y) > reach) {
-          // this side cannot be reached: try the next one; after all four, give this diamond up
+          // this side cannot be reached: try the next one, nearest the dropoff side first; after
+          // all eight, give this diamond up for a minute
           e.path = null; e.repaths = 0;
           o.side = (o.side || 0) + 1;
-          if (o.side > 3) {
+          if (o.side > 7) {
             if (r.miner === e.id) r.miner = 0;
-            o.avoid = r.id; o.target = 0; o.side = 0;
+            (o.avoid || (o.avoid = {}))[r.id] = g.time + 60;
+            o.target = 0; o.side = 0;
           }
         }
       }

@@ -12,24 +12,28 @@
 
   // Give unit u an order (or queue it). Returns false if the order could not be accepted.
   function issue(g, u, order, queue) {
-    if (queue && order) {
-      // a worker that is gathering does the queued job first, then goes back to its diamonds
-      if (u.order && ENDLESS[u.order.type] && !u.queue.length) {
-        const resume = u.order.type === 'gather' ? { type: 'gather', target: u.order.target, resumed: true } : null;
-        if (u.order.type === 'gather') g.releaseMiner(u);
+    if (queue && order && (u.order || u.queue.length)) {
+      // Behind an order that never ends (and nothing real queued yet): another endless order
+      // replaces it (gather from a different diamond); anything else is done first, and the
+      // unit then takes up the old order again (a worker goes back to its diamonds).
+      // Endless orders that reach the front with work queued behind them yield the same way
+      // (Behavior.yieldEndless).
+      if (u.order && ENDLESS[u.order.type] && u.queue.every((q) => q.resumed)) {
+        const old = u.order;
+        const resume = ENDLESS[order.type] ? null : old.type === 'gather' ? { type: 'gather', target: old.target, resumed: true } : old;
+        if (old.type === 'gather') g.releaseMiner(u);
         u.order = order;
+        u.queue.length = 0;
         u.path = null; u.repaths = 0; u.subTarget = 0; u.stuckN = 0;
         if (resume) u.queue.push(resume);
         return true;
       }
-      if (u.order || u.queue.length) {
-        if (u.queue.length >= AC.QUEUE_MAX) return false;
-        // keep an automatic return-to-gathering at the end of the queue
-        const last = u.queue[u.queue.length - 1];
-        if (last && last.resumed) u.queue.splice(u.queue.length - 1, 0, order);
-        else u.queue.push(order);
-        return true;
-      }
+      if (u.queue.length >= AC.QUEUE_MAX) return false;
+      // keep an automatic return-to-gathering at the end of the queue
+      const last = u.queue[u.queue.length - 1];
+      if (last && last.resumed) u.queue.splice(u.queue.length - 1, 0, order);
+      else u.queue.push(order);
+      return true;
     }
     if (u.order && u.order.type === 'gather') g.releaseMiner(u);
     if (u.order && u.order.type === 'build' && u.order.paid && !u.order.placed) {

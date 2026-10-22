@@ -131,9 +131,13 @@
       return;
     }
     if (ab.target === 'none') { A.execute(g, e, ab, o); return; }
-    // give up if the caster stops getting closer (target out of reach, e.g. deep in a forest)
-    const stalled = (d) => {
+    // give up if the caster stops getting closer (target out of reach, e.g. deep in a forest);
+    // walking a route whose end lies nearer than it has yet been (round a ridge or a lake) counts
+    // as getting closer. distFrom(x, y) measures the remaining distance from a point.
+    const stalled = (d, distFrom) => {
       if (o.best == null || d < o.best - 6) { o.best = d; o.bestT = g.time; return false; }
+      const p = e.path, w = p && e.pathI < p.length ? p[p.length - 1] : null;
+      if (w && distFrom(w[0], w[1]) < o.best - 6) { o.bestT = g.time; return false; }
       if (g.time - o.bestT < 4) return false;
       if (!o.silent) g.emit({ type: 'error', player: e.owner, text: 'Cannot reach the target.' });
       B().nextOrder(g, e);
@@ -142,7 +146,7 @@
     if (ab.target === 'point') {
       const d = Math.hypot(o.x - e.x, o.y - e.y);
       if (d <= ab.range) { A.execute(g, e, ab, o); return; }
-      if (stalled(d)) return;
+      if (stalled(d, (x, y) => Math.hypot(o.x - x, o.y - y))) return;
       B().moveToward(g, e, o.x, o.y, ab.range - 8, dt);
       return;
     }
@@ -155,7 +159,7 @@
       }
       const gap = B().gap(g, e, t);
       if (gap <= ab.range) { A.execute(g, e, ab, o); return; }
-      if (stalled(gap)) return;
+      if (stalled(gap, (x, y) => (t.kind === 'building' ? g.edgeDist(t, x, y) : Math.hypot(t.x - x, t.y - y) - t.radius) - e.radius)) return;
       if (e.path && Math.hypot(e.pathGoalX - t.x, e.pathGoalY - t.y) > 30) e.path = null;
       B().moveToward(g, e, t.x, t.y, 2, dt);
     }
