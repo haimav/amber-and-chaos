@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Amber and Chaos</title>
+  <meta name="description" content="A real-time strategy game set in Roger Zelazny's Amber universe.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <canvas id="game"></canvas>
+    <canvas id="titleCanvas"></canvas>
+
+    <div id="hud" class="hidden">
+      <div id="topbar">
+        <div class="res" id="resD" title="Diamonds, gathered by your workers"><i class="ico diamond"></i><span id="resDv">0</span></div>
+        <div class="res" id="resP" title="Order (Amber) or Flux (Chaos): from your seat of power, shrines and Broken Patterns"><i class="ico power"></i><span id="resPv">0</span><span class="lbl" id="resPl">Order</span></div>
+        <div class="res" id="resS" title="Supply: used / available"><i class="ico supply"></i><span id="resSv">0/0</span></div>
+        <div id="clock">0:00</div>
+        <div id="topBtns">
+          <button id="idleBtn" title="Select an idle worker (. or F1)">No idle workers</button>
+          <button id="fsBtn" title="Toggle full screen">⛶</button>
+          <button id="menuBtn" title="Menu (Esc / F10)">Menu</button>
+        </div>
+      </div>
+      <div id="heroBar"></div>
+      <div id="objectives" class="hidden"></div>
+      <div id="messages"></div>
+      <div id="dialog" class="hidden"></div>
+      <div id="bottom">
+        <div id="minimapWrap"><canvas id="minimap"></canvas></div>
+        <div id="selPanel"></div>
+        <div id="cmdCard"></div>
+      </div>
+    </div>
+    <div id="tooltip" class="hidden"></div>
+    <div id="screens" class="hidden"></div>
+    <div id="loading" class="hidden"><div>Shifting through Shadow…</div></div>
+  </div>
+
+  <!-- simulation (no DOM) -->
+  <script src="js/core/util.js"></script>
+  <script src="js/core/data.js"></script>
+  <script src="js/core/map.js"></script>
+  <script src="js/core/path.js"></script>
+  <script src="js/core/game.js"></script>
+  <script src="js/core/behavior.js"></script>
+  <script src="js/core/abilities.js"></script>
+  <script src="js/core/commands.js"></script>
+  <script src="js/core/ai.js"></script>
+  <script src="js/core/setup.js"></script>
+  <script src="js/core/scenarios.js"></script>
+  <!-- presentation -->
+  <script src="js/ui/art.js"></script>
+  <script src="js/ui/render.js"></script>
+  <script src="js/ui/audio.js"></script>
+  <script src="js/ui/hud.js"></script>
+  <script src="js/ui/input.js"></script>
+  <script src="js/ui/menus.js"></script>
+  <script src="js/ui/main.js"></script>
+</body>
+</html>
