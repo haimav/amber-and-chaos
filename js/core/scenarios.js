@@ -100,6 +100,9 @@
   };
   // the enemy's income for the chosen difficulty (Hard leaves it at the computer's own rate)
   S.enemyIncome = (opts, normal) => (opts.difficulty === 'hard' ? 1 : opts.difficulty === 'easy' ? 0.7 : normal);
+  // numbers for missions without a computer opponent: Normal is the base
+  S.diffK = (opts) => (opts.difficulty === 'hard' ? 1.4 : opts.difficulty === 'easy' ? 0.65 : 1);
+  S.bossK = (opts) => (opts.difficulty === 'hard' ? 1.5 : opts.difficulty === 'easy' ? 0.75 : 1);
   S.say = function (g, who, text, portrait, color, life) { g.emit({ type: 'dialog', who, text, portrait, color: color || 0, life }); };
   S.obj = function (g, id, text, opts) {
     const o = Object.assign({ id, text, done: false, failed: false }, opts || {});
@@ -201,11 +204,12 @@
       const corwin = S.hero(g, 0, 'corwin', 24 * T, 56 * T, 2);
       const ganelon = S.hero(g, 0, 'ganelon', 25 * T, 58 * T, 2);
       S.spawn(g, 0, [['lorraine_militia', 6], ['guard', 3], ['ranger', 3]], 22 * T, 60 * T);
-      // the Circle
+      // the Circle: its numbers and its lord follow the chosen difficulty
+      const k = (n) => Math.max(1, Math.round(n * S.diffK(opts)));
       const circle = g.spawnBuilding('the_circle', 1, 60, 12, true);
       g.spawnBuilding('hollow', 1, 66, 20, true);
       S.lay(g, 60, 16, 36, 40, 2);
-      S.spawn(g, 1, [['demon', 6], ['crossbow', 2]], 56 * T, 20 * T);
+      S.spawn(g, 1, [['demon', k(6)], ['crossbow', k(2)]], 56 * T, 20 * T);
       for (const u of g.units) if (u.owner === 1) u.order = { type: 'hold' };
       // wild things
       for (const [x, y] of [[30, 20], [58, 64], [10, 30]]) S.spawn(g, 2, [['shadow_wolf', 2]], x * T, y * T).forEach((u) => { u.homeX = u.x; u.homeY = u.y; });
@@ -226,10 +230,10 @@
             sc.wave++;
             sc.nextWave = g.time + 55;
             const n = sc.wave;
-            const list = [['demon', Math.min(10, 2 + n)]];
-            if (n >= 3) list.push(['stalker', Math.min(4, n - 2)]);
-            if (n >= 4) list.push(['crossbow', Math.min(4, n - 3)]);
-            if (n >= 6) list.push(['hellmaid', 1]);
+            const list = [['demon', k(Math.min(10, 2 + n))]];
+            if (n >= 3) list.push(['stalker', k(Math.min(4, n - 2))]);
+            if (n >= 4) list.push(['crossbow', k(Math.min(4, n - 3))]);
+            if (n >= (opts.difficulty === 'hard' ? 5 : 6)) list.push(['hellmaid', 1]);
             const us = S.spawn(g, 1, list, 58 * T, 22 * T);
             S.waveAttack(g, us, 14 * T, 60 * T);
             g.message('Demons pour from the Circle!', { kind: 'warn' });
@@ -239,6 +243,7 @@
             sc.phase = 2;
             // the lord of the Circle shows himself only when the assault breaks
             const lord = g.spawnUnit('goat_lord', 1, 58 * T, 19 * T);
+            lord.maxHp = lord.hp = Math.round(lord.maxHp * S.bossK(opts));
             lord.homeX = lord.x; lord.homeY = lord.y;
             lord.order = { type: 'hold' };
             sc.lordId = lord.id;
@@ -252,7 +257,7 @@
         } else if (sc.phase === 2) {
           if (g.time >= sc.nextWave) {
             sc.nextWave = g.time + 75;
-            const us = S.spawn(g, 1, [['demon', 4], ['stalker', 2]], 58 * T, 22 * T);
+            const us = S.spawn(g, 1, [['demon', k(4)], ['stalker', k(2)]], 58 * T, 22 * T);
             S.waveAttack(g, us, 14 * T, 60 * T);
           }
         }
@@ -455,8 +460,10 @@
         [18, 56, [['shadow_wolf', 3]]], [16, 36, [['shadow_wolf', 3], ['wild_manticore', 1]]], [26, 24, [['stalker', 3]]],
         [44, 34, [['wild_manticore', 2]]], [50, 42, [['shadow_wolf', 4]]], [58, 26, [['stalker', 3], ['shadow_wolf', 2]]],
       ];
-      for (const [x, y, l] of camps) S.spawn(g, N, l, x * T, y * T).forEach((u) => { u.homeX = u.x; u.homeY = u.y; });
+      const k = (n) => Math.max(1, Math.round(n * S.diffK(opts)));
+      for (const [x, y, l] of camps) S.spawn(g, N, l.map(([id, n]) => [id, k(n)]), x * T, y * T).forEach((u) => { u.homeX = u.x; u.homeY = u.y; });
       const dragon = g.spawnUnit('glass_dragon', N, 56 * T, 15 * T);
+      dragon.maxHp = dragon.hp = Math.round(dragon.maxHp * S.bossK(opts));
       dragon.homeX = dragon.x; dragon.homeY = dragon.y;
       const sc = (g.scenario = { id: 'tower', customVictoryOnly: true, heroes: heroes.map((h) => h.id), dragonId: dragon.id, phase: 1 });
       S.obj(g, 'cross', 'Cross the sunless land to Brand\'s tower');

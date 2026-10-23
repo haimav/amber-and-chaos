@@ -172,17 +172,30 @@
   B.nextOrder = nextOrder;
 
   // Orders that never finish on their own (gathering, patrol, hold, follow) give way to real
-  // orders queued behind them, and are taken up again once those are done.
+  // orders queued behind them, and are taken up again once those are done. Of several endless
+  // orders, the one the player queued last wins; returns to an interrupted order (flagged
+  // resumed) are older than anything queued since.
   const ENDLESS = { gather: 1, patrol: 1, hold: 1, follow: 1 };
+  B.resumeOf = (o) => (o.type === 'gather' ? { type: 'gather', target: o.target, resumed: true } : Object.assign(o, { resumed: true }));
   function yieldEndless(g, e) {
     const o = e.order;
     if (!o || !ENDLESS[o.type]) return;
-    if (!e.queue.some((q) => !ENDLESS[q.type])) {
-      // only returns-to-gathering left behind an order that never ends: they can never run
-      if (e.queue.every((q) => q.resumed)) e.queue.length = 0;
+    const q = e.queue;
+    if (!q.some((x) => !ENDLESS[x.type])) {
+      // nothing real queued: switch to the newest endless order the player queued, if any
+      let k = q.length - 1;
+      while (k >= 0 && q[k].resumed) k--;
+      const newest = k >= 0 ? q[k] : null;
+      q.length = 0;
+      if (newest) { q.push(newest); nextOrder(g, e); }
       return;
     }
-    if (!ENDLESS[e.queue[e.queue.length - 1].type]) e.queue.push(o.type === 'gather' ? { type: 'gather', target: o.target, resumed: true } : o);
+    // real work behind: do it first, then come back here unless a later endless order supersedes this one
+    const last = q[q.length - 1];
+    if (!ENDLESS[last.type] || last.resumed) {
+      if (!o.resumed) while (q.length && q[q.length - 1].resumed) q.pop();
+      if (!q.length || !ENDLESS[q[q.length - 1].type]) q.push(B.resumeOf(o));
+    }
     nextOrder(g, e);
   }
 
@@ -814,21 +827,44 @@
     if (def.attack) towerAttack(g, b, dt);
   };
 
+  // can a unit standing on tile (x0, y0) beside building b walk away from it, or is the tile
+  // a pocket sealed by the building and the rock around it?
+  B.leadsOut = function (g, b, x0, y0, bits) {
+    const m = g.map, s = b.size, R = 4;
+    const seen = new Set([y0 * m.w + x0]), q = [x0, y0];
+    while (q.length) {
+      const y = q.pop(), x = q.pop();
+      for (let k = 0; k < 4; k++) {
+        const nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0), ny = y + (k === 2 ? 1 : k === 3 ? -1 : 0), j = ny * m.w + nx;
+        if (seen.has(j) || !m.passable(nx, ny, bits)) continue;
+        if (nx < b.tx - R || nx >= b.tx + s + R || ny < b.ty - R || ny >= b.ty + s + R || seen.size >= 40) return true;
+        seen.add(j); q.push(nx, ny);
+      }
+    }
+    return false;
+  };
+  // the open tile beside building b nearest (px, py) that leads away from it (or, failing that, any open tile)
+  B.exitTile = function (g, b, px, py, bits, air) {
+    let best = null, bd = 1e18, sealed = null, sd = 1e18;
+    const s = b.size;
+    for (let y = b.ty - 1; y <= b.ty + s; y++)
+      for (let x = b.tx - 1; x <= b.tx + s; x++) {
+        if (x >= b.tx && x < b.tx + s && y >= b.ty && y < b.ty + s) continue;
+        if (!air && !g.map.passable(x, y, bits)) continue;
+        const d = U.dist2(x * T + T / 2, y * T + T / 2, px, py);
+        if (d >= bd) continue;
+        if (air || B.leadsOut(g, b, x, y, bits)) { bd = d; best = [x, y]; } else if (d < sd) { sd = d; sealed = [x, y]; }
+      }
+    return best || sealed;
+  };
+
   B.spawnFromBuilding = function (g, b, unitId) {
     const def = AC.UNITS[unitId];
     const p = g.players[b.owner];
     // exit tile nearest to rally (or below)
     const rx = b.rally ? b.rally.x : b.x, ry = b.rally ? b.rally.y : (b.ty + b.size + 2) * T;
-    let best = null, bd = 1e18;
     const s = b.size;
-    for (let y = b.ty - 1; y <= b.ty + s; y++)
-      for (let x = b.tx - 1; x <= b.tx + s; x++) {
-        if (x >= b.tx && x < b.tx + s && y >= b.ty && y < b.ty + s) continue;
-        if (!def.air && !g.map.passable(x, y, g.moveBits({ def }))) continue;
-        const d = U.dist2(x * T + T / 2, y * T + T / 2, rx, ry);
-        if (d < bd) { bd = d; best = [x, y]; }
-      }
-    if (!best) best = [b.tx + Math.floor(s / 2), b.ty + s];
+    const best = B.exitTile(g, b, rx, ry, g.moveBits({ def }), def.air) || [b.tx + Math.floor(s / 2), b.ty + s];
     const u = g.spawnUnit(unitId, b.owner, best[0] * T + T / 2, best[1] * T + T / 2);
     u.angle = Math.atan2(ry - u.y, rx - u.x);
     if (p) p.stats.trained++;

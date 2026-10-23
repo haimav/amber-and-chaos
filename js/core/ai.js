@@ -334,33 +334,35 @@
       return this.onePiece(tx, ty, s);
     }
     // the open ground round a footprint, searched a few tiles out (but not through it), is one
-    // piece; dead-end pockets that lead nowhere do not count, unless they are large or hold
-    // diamonds that would be walled off
+    // piece. The search walks only where units can (other buildings and diamonds block it, as
+    // they block units). Dead-end pockets that lead nowhere do not count, unless they are large
+    // or touch diamonds or another building, which would be walled off.
     onePiece(tx, ty, s) {
       const m = this.g.map, R = 5;
       const inF = (x, y) => x >= tx && x < tx + s && y >= ty && y < ty + s;
-      const pass = (j) => (AC.PASS[m.terrain[j]] & 1) !== 0;
+      const pass = (j) => (AC.PASS[m.terrain[j]] & 1) !== 0 && !m.occ[j];
       const seen = new Set();
       let pieces = 0;
       for (let y = ty - 1; y <= ty + s; y++)
         for (let x = tx - 1; x <= tx + s; x++) {
           const i0 = y * m.w + x;
           if (inF(x, y) || !m.inb(x, y) || seen.has(i0) || !pass(i0)) continue;
-          let n = 0, out = false, res = false;
+          let n = 0, out = false, holds = false;
           const q = [i0];
           seen.add(i0);
           while (q.length) {
             const i = q.pop(), cx = i % m.w, cy = (i / m.w) | 0;
             n++;
-            if (m.occ[i]) { const e = this.g.get(m.occ[i]); if (e && e.kind === 'resource') res = true; }
             for (let k = 0; k < 4; k++) {
               const nx = cx + (k === 0 ? 1 : k === 1 ? -1 : 0), ny = cy + (k === 2 ? 1 : k === 3 ? -1 : 0), j = ny * m.w + nx;
-              if (!m.inb(nx, ny) || inF(nx, ny) || seen.has(j) || !pass(j)) continue;
+              if (!m.inb(nx, ny) || inF(nx, ny) || seen.has(j)) continue;
+              if (m.occ[j]) { const e = this.g.get(m.occ[j]); if (e && (e.kind === 'resource' || e.kind === 'building')) holds = true; }
+              if (!pass(j)) continue;
               if (nx < tx - R || nx >= tx + s + R || ny < ty - R || ny >= ty + s + R) { out = true; continue; }
               seen.add(j); q.push(j);
             }
           }
-          if (out || res || n >= 30) pieces++;
+          if (out || holds || n >= 30) pieces++;
         }
       return pieces === 1;
     }
@@ -543,14 +545,19 @@
           this.lastDefendCmd = g.time;
           this.cmd({ type: 'attackMove', ids: near.map((u) => u.id), x: threat.x, y: threat.y });
         }
-        // a stronghold's garrison never joins the waves, but it does answer an attack on the base
-        const guards = this.garrison.filter((u) => !u.order || u.order.type !== 'attack' || u.order.auto);
+        // a stronghold's garrison never joins the waves, but guards whose own post is under
+        // attack answer it, and none chase far from their post
+        const guards = this.garrison.filter((u) => (!u.order || u.order.type !== 'attack' || u.order.auto) &&
+          U.dist2(u.homeX, u.homeY, threat.x, threat.y) < (12 * T) ** 2);
         if (guards.length && g.time - (this.lastGuardCmd || 0) > 2) {
           this.lastGuardCmd = g.time;
           this.cmd({ type: 'attackMove', ids: guards.map((u) => u.id), x: threat.x, y: threat.y });
         }
+        for (const u of this.garrison) {
+          if (u.order && u.order.type === 'attackMove' && U.dist2(u.x, u.y, u.homeX, u.homeY) > (14 * T) ** 2) AC.issue(g, u, { type: 'move', x: u.homeX, y: u.homeY }, false);
+        }
         // workers fight back against small raids if no army
-        if (!fighters.length && !this.garrison.length && threat.n <= 3) {
+        if (!fighters.length && !guards.length && threat.n <= 3) {
           const ws = this.workers.filter((w) => U.dist2(w.x, w.y, threat.x, threat.y) < (8 * T) ** 2).slice(0, 6);
           if (ws.length) this.cmd({ type: 'attackMove', ids: ws.map((w) => w.id), x: threat.x, y: threat.y });
           this.workerDefense = true;

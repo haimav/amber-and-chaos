@@ -20,7 +20,7 @@
       // (Behavior.yieldEndless).
       if (u.order && ENDLESS[u.order.type] && u.queue.every((q) => q.resumed)) {
         const old = u.order;
-        const resume = ENDLESS[order.type] ? null : old.type === 'gather' ? { type: 'gather', target: old.target, resumed: true } : old;
+        const resume = ENDLESS[order.type] ? null : AC.Behavior.resumeOf(old);
         if (old.type === 'gather') g.releaseMiner(u);
         u.order = order;
         u.queue.length = 0;

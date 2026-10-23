@@ -241,7 +241,10 @@
         if (u.dead || u.def.air) continue;
         const tx = Math.floor(u.x / T), ty = Math.floor(u.y / T);
         if (tx >= b.tx && ty >= b.ty && tx < b.tx + b.size && ty < b.ty + b.size) {
-          const np = this.pf.nearestPassable(tx, ty, this.moveBits(u), 8);
+          const bits = this.moveBits(u);
+          let np = this.pf.nearestPassable(tx, ty, bits, 8);
+          // never into a pocket the new building has just sealed
+          if (np && !AC.Behavior.leadsOut(this, b, np[0], np[1], bits)) np = AC.Behavior.exitTile(this, b, u.x, u.y, bits, false) || np;
           if (np) { u.x = u.prevX = np[0] * T + T / 2; u.y = u.prevY = np[1] * T + T / 2; }
         }
       }
