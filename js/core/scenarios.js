@@ -95,7 +95,9 @@
   // defenders of a stronghold: they fight whatever comes near, but the computer never
   // sends them away in its attack waves
   S.garrison = function (us) {
-    for (const u of us) { u.garrison = true; u.homeX = u.x; u.homeY = u.y; }
+    // the group holds one post and answers an attack on it as one body
+    const px = us.reduce((a, u) => a + u.x, 0) / (us.length || 1), py = us.reduce((a, u) => a + u.y, 0) / (us.length || 1);
+    for (const u of us) { u.garrison = true; u.homeX = u.x; u.homeY = u.y; u.postX = px; u.postY = py; }
     return us;
   };
   // the enemy's income for the chosen difficulty (Hard leaves it at the computer's own rate)

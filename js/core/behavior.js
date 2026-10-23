@@ -827,35 +827,61 @@
     if (def.attack) towerAttack(g, b, dt);
   };
 
-  // can a unit standing on tile (x0, y0) beside building b walk away from it, or is the tile
-  // a pocket sealed by the building and the rock around it?
-  B.leadsOut = function (g, b, x0, y0, bits) {
-    const m = g.map, s = b.size, R = 4;
-    const seen = new Set([y0 * m.w + x0]), q = [x0, y0];
-    while (q.length) {
-      const y = q.pop(), x = q.pop();
+  // How much ground a unit on (x0, y0) can walk over, counted up to LEAD_CAP tiles. Ring tiles
+  // in `met` that the flood reaches share its count, so one flood serves a whole stretch.
+  const LEAD_CAP = 2000;
+  let mark = null, stamp = 0, fq = null;
+  function reach(m, x0, y0, bits, met) {
+    const N = m.w * m.h;
+    if (!mark || mark.length !== N) { mark = new Int32Array(N); fq = new Int32Array(LEAD_CAP + 4); stamp = 0; }
+    const st = ++stamp, i0 = y0 * m.w + x0;
+    mark[i0] = st; fq[0] = i0;
+    let n = 1;
+    for (let h = 0; h < n && n < LEAD_CAP; h++) {
+      const i = fq[h], x = i % m.w, y = (i / m.w) | 0;
       for (let k = 0; k < 4; k++) {
-        const nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0), ny = y + (k === 2 ? 1 : k === 3 ? -1 : 0), j = ny * m.w + nx;
-        if (seen.has(j) || !m.passable(nx, ny, bits)) continue;
-        if (nx < b.tx - R || nx >= b.tx + s + R || ny < b.ty - R || ny >= b.ty + s + R || seen.size >= 40) return true;
-        seen.add(j); q.push(nx, ny);
+        const nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0), ny = y + (k === 2 ? 1 : k === 3 ? -1 : 0);
+        if (!m.passable(nx, ny, bits)) continue;
+        const j = ny * m.w + nx;
+        if (mark[j] === st) continue;
+        mark[j] = st; fq[n++] = j;
       }
     }
-    return false;
-  };
-  // the open tile beside building b nearest (px, py) that leads away from it (or, failing that, any open tile)
-  B.exitTile = function (g, b, px, py, bits, air) {
-    let best = null, bd = 1e18, sealed = null, sd = 1e18;
-    const s = b.size;
+    n = Math.min(n, LEAD_CAP);
+    if (met) for (const i of met.keys()) if (mark[i] === st) met.set(i, n);
+    return n;
+  }
+  // The open tiles round building b, each with how much ground it leads to, and the most any
+  // side leads to. A corner tile that touches the footprint only diagonally, with blocked tiles
+  // on both sides, belongs to other ground (units cannot cut that corner) and is left out.
+  function ringReach(g, b, bits) {
+    const m = g.map, s = b.size, met = new Map();
     for (let y = b.ty - 1; y <= b.ty + s; y++)
       for (let x = b.tx - 1; x <= b.tx + s; x++) {
         if (x >= b.tx && x < b.tx + s && y >= b.ty && y < b.ty + s) continue;
-        if (!air && !g.map.passable(x, y, bits)) continue;
-        const d = U.dist2(x * T + T / 2, y * T + T / 2, px, py);
-        if (d >= bd) continue;
-        if (air || B.leadsOut(g, b, x, y, bits)) { bd = d; best = [x, y]; } else if (d < sd) { sd = d; sealed = [x, y]; }
+        if (!m.passable(x, y, bits)) continue;
+        if ((x === b.tx - 1 || x === b.tx + s) && (y === b.ty - 1 || y === b.ty + s) &&
+          !m.passable(x === b.tx - 1 ? x + 1 : x - 1, y, bits) && !m.passable(x, y === b.ty - 1 ? y + 1 : y - 1, bits)) continue;
+        met.set(y * m.w + x, -1);
       }
-    return best || sealed;
+    let top = 0;
+    for (const [i, n] of met) top = Math.max(top, n >= 0 ? n : reach(m, i % m.w, (i / m.w) | 0, bits, met));
+    return { met, top };
+  }
+  // The open tile beside building b nearest (px, py) that leads away from it: on ground at least
+  // as large as any side of the building leads to, so never into a pocket the building seals
+  // off, however deep it runs (any ground of LEAD_CAP tiles or more counts as leading away).
+  B.exitTile = function (g, b, px, py, bits, air) {
+    const s = b.size, rr = air ? null : ringReach(g, b, bits);
+    let best = null, bd = 1e18;
+    for (let y = b.ty - 1; y <= b.ty + s; y++)
+      for (let x = b.tx - 1; x <= b.tx + s; x++) {
+        if (x >= b.tx && x < b.tx + s && y >= b.ty && y < b.ty + s) continue;
+        if (rr && !(rr.met.get(y * g.map.w + x) >= rr.top)) continue;
+        const d = U.dist2(x * T + T / 2, y * T + T / 2, px, py);
+        if (d < bd) { bd = d; best = [x, y]; }
+      }
+    return best;
   };
 
   B.spawnFromBuilding = function (g, b, unitId) {

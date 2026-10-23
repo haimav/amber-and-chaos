@@ -545,19 +545,38 @@
           this.lastDefendCmd = g.time;
           this.cmd({ type: 'attackMove', ids: near.map((u) => u.id), x: threat.x, y: threat.y });
         }
-        // a stronghold's garrison never joins the waves, but guards whose own post is under
-        // attack answer it, and none chase far from their post
-        const guards = this.garrison.filter((u) => (!u.order || u.order.type !== 'attack' || u.order.auto) &&
-          U.dist2(u.homeX, u.homeY, threat.x, threat.y) < (12 * T) ** 2);
-        if (guards.length && g.time - (this.lastGuardCmd || 0) > 2) {
-          this.lastGuardCmd = g.time;
-          this.cmd({ type: 'attackMove', ids: guards.map((u) => u.id), x: threat.x, y: threat.y });
+        // A stronghold's garrison never joins the waves. A group whose post is under attack
+        // answers it as one body; guards beside a building under fire (any guard, when it is
+        // the seat of power) go for the shooters wherever they stand; and none chase far.
+        const free = (u) => !u.order || u.order.type !== 'attack' || u.order.auto;
+        const guards = this.garrison.filter((u) => free(u) && U.dist2(u.postX, u.postY, threat.x, threat.y) < (12 * T) ** 2);
+        const hit = [];
+        for (const b of this.blds) {
+          if (g.time - b.lastHitT > 3) continue;
+          const a = g.get(b.lastAttacker);
+          if (a && !a.dead && g.areEnemies(this.pid, a.owner) && !g.players[a.owner].isNeutral) hit.push({ b, a });
         }
+        const hitNear = (x, y, r) => {
+          let best = null, bd = (r * T) ** 2;
+          for (const h of hit) { const d = U.dist2(x, y, h.b.x, h.b.y); if (d < bd) { bd = d; best = h; } }
+          return best;
+        };
+        const seat = hit.find((h) => h.b.def.hq);
+        const defend = (u) => hitNear(u.homeX, u.homeY, 10) || seat;
+        const defenders = this.garrison.filter((u) => free(u) && guards.indexOf(u) < 0 && defend(u));
+        if ((guards.length || defenders.length) && g.time - (this.lastGuardCmd || 0) > 2) {
+          this.lastGuardCmd = g.time;
+          if (guards.length) this.cmd({ type: 'attackMove', ids: guards.map((u) => u.id), x: threat.x, y: threat.y });
+          const by = new Map();
+          for (const u of defenders) { const h = defend(u); if (!by.has(h)) by.set(h, []); by.get(h).push(u.id); }
+          for (const [h, ids] of by) this.cmd({ type: 'attackMove', ids, x: h.a.x, y: h.a.y });
+        }
+        // a chase reaching past 14 tiles from the post turns back, unless a building under fire is near
         for (const u of this.garrison) {
-          if (u.order && u.order.type === 'attackMove' && U.dist2(u.x, u.y, u.homeX, u.homeY) > (14 * T) ** 2) AC.issue(g, u, { type: 'move', x: u.homeX, y: u.homeY }, false);
+          if (u.order && u.order.type === 'attackMove' && U.dist2(u.x, u.y, u.postX, u.postY) > (14 * T) ** 2 && !hitNear(u.x, u.y, 14)) AC.issue(g, u, { type: 'move', x: u.homeX, y: u.homeY }, false);
         }
         // workers fight back against small raids if no army
-        if (!fighters.length && !guards.length && threat.n <= 3) {
+        if (!fighters.length && !guards.length && !defenders.length && threat.n <= 3) {
           const ws = this.workers.filter((w) => U.dist2(w.x, w.y, threat.x, threat.y) < (8 * T) ** 2).slice(0, 6);
           if (ws.length) this.cmd({ type: 'attackMove', ids: ws.map((w) => w.id), x: threat.x, y: threat.y });
           this.workerDefense = true;
