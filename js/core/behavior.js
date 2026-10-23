@@ -829,7 +829,7 @@
 
   // How much ground a unit on (x0, y0) can walk over, counted up to LEAD_CAP tiles. Ring tiles
   // in `met` that the flood reaches share its count, so one flood serves a whole stretch.
-  const LEAD_CAP = 2000;
+  const LEAD_CAP = 200; // ground of this many tiles or more is real ground, not a sealed pocket
   let mark = null, stamp = 0, fq = null;
   function reach(m, x0, y0, bits, met) {
     const N = m.w * m.h;
@@ -870,7 +870,8 @@
   }
   // The open tile beside building b nearest (px, py) that leads away from it: on ground at least
   // as large as any side of the building leads to, so never into a pocket the building seals
-  // off, however deep it runs (any ground of LEAD_CAP tiles or more counts as leading away).
+  // off, however deep it runs (any ground of LEAD_CAP tiles or more counts as leading away,
+  // so a wall built across the neck of a base leaves both sides usable).
   B.exitTile = function (g, b, px, py, bits, air) {
     const s = b.size, rr = air ? null : ringReach(g, b, bits);
     let best = null, bd = 1e18;

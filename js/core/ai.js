@@ -547,9 +547,8 @@
         }
         // A stronghold's garrison never joins the waves. A group whose post is under attack
         // answers it as one body; guards beside a building under fire (any guard, when it is
-        // the seat of power) go for the shooters wherever they stand; and none chase far.
+        // their own seat of power) go for the shooters wherever they stand; and none chase far.
         const free = (u) => !u.order || u.order.type !== 'attack' || u.order.auto;
-        const guards = this.garrison.filter((u) => free(u) && U.dist2(u.postX, u.postY, threat.x, threat.y) < (12 * T) ** 2);
         const hit = [];
         for (const b of this.blds) {
           if (g.time - b.lastHitT > 3) continue;
@@ -561,9 +560,14 @@
           for (const h of hit) { const d = U.dist2(x, y, h.b.x, h.b.y); if (d < bd) { bd = d; best = h; } }
           return best;
         };
-        const seat = hit.find((h) => h.b.def.hq);
-        const defend = (u) => hitNear(u.homeX, u.homeY, 10) || seat;
-        const defenders = this.garrison.filter((u) => free(u) && guards.indexOf(u) < 0 && defend(u));
+        // the seat of power is the guards' own: an outlying bastion or keep, too far for the leash
+        // below to let them reach it, does not draw the garrison out of the stronghold
+        const seatOf = (u) => hit.find((h) => h.b.def.hq && U.dist2(u.postX, u.postY, h.b.x, h.b.y) < (24 * T) ** 2);
+        const defend = (u) => hitNear(u.homeX, u.homeY, 10) || seatOf(u);
+        // the shooters of a building under fire come first, so the averaged threat point cannot
+        // hold a guard back from them; the rest answer a threat near their post as one body
+        const defenders = this.garrison.filter((u) => free(u) && defend(u));
+        const guards = this.garrison.filter((u) => free(u) && defenders.indexOf(u) < 0 && U.dist2(u.postX, u.postY, threat.x, threat.y) < (12 * T) ** 2);
         if ((guards.length || defenders.length) && g.time - (this.lastGuardCmd || 0) > 2) {
           this.lastGuardCmd = g.time;
           if (guards.length) this.cmd({ type: 'attackMove', ids: guards.map((u) => u.id), x: threat.x, y: threat.y });
@@ -574,6 +578,9 @@
         // a chase reaching past 14 tiles from the post turns back, unless a building under fire is near
         for (const u of this.garrison) {
           if (u.order && u.order.type === 'attackMove' && U.dist2(u.x, u.y, u.postX, u.postY) > (14 * T) ** 2 && !hitNear(u.x, u.y, 14)) AC.issue(g, u, { type: 'move', x: u.homeX, y: u.homeY }, false);
+          // guards left idle off their posts and no longer called on walk back, even while some
+          // other intruder lingers near the base
+          else if (!u.order && guards.indexOf(u) < 0 && defenders.indexOf(u) < 0 && Math.hypot(u.x - u.homeX, u.y - u.homeY) > 3 * T) AC.issue(g, u, { type: 'move', x: u.homeX, y: u.homeY }, false);
         }
         // workers fight back against small raids if no army
         if (!fighters.length && !guards.length && !defenders.length && threat.n <= 3) {
