@@ -118,8 +118,8 @@ There are also wild creatures of Shadow: wolves, feral manticores and the Sphinx
    bring Dara to the Pattern beneath Castle Amber.
 
 Each mission can be played on Easy, Normal or Hard. Normal is meant to be won with
-steady play. Hard gives the enemy more troops and a richer economy, and the enemy
-strongholds keep garrisons that defend them when attacked.
+steady play. Hard gives the enemy more troops and a richer economy. On every
+difficulty, enemy strongholds keep garrisons that stay home and defend them.
 
 ![Kolvir under siege](docs/screenshots/mission-kolvir.jpg)
 
