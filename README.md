@@ -117,6 +117,10 @@ There are also wild creatures of Shadow: wolves, feral manticores and the Sphinx
 5. **Daughter of Chaos** (played as the Courts). Push the Black Road through Arden and
    bring Dara to the Pattern beneath Castle Amber.
 
+Each mission can be played on Easy, Normal or Hard. Normal is meant to be won with
+steady play. Hard gives the enemy more troops and a richer economy, and the enemy
+strongholds keep garrisons that defend them when attacked.
+
 ![Kolvir under siege](docs/screenshots/mission-kolvir.jpg)
 
 ### Skirmish
